@@ -4,8 +4,8 @@
 package readability
 
 import (
+	"compress/flate"
 	"compress/gzip"
-	"compress/zlib"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -43,10 +43,7 @@ func httpGet(url string) (string, error) {
 			return "", err
 		}
 	} else if contentEncoding == "deflate" {
-		x, err := zlib.NewReader(resp.Body)
-		if err != nil {
-			return "", err
-		}
+		x := flate.NewReader(resp.Body)
 		bytes, err = ioutil.ReadAll(x)
 		if err != nil {
 			return "", err
