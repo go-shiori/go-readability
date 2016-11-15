@@ -56,7 +56,7 @@ func httpGet(url string) (string, error) {
 		}
 	}
 
-	srcStr := strings.Replace(string(bytes), "&nbsp;", " ", -1)
+	srcStr := string(bytes)
 	pageCodes := pageCodeReg.FindStringSubmatch(srcStr)
 	if len(pageCodes) >= 2 {
 		curCode := strings.ToLower(pageCodes[1])
