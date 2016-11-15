@@ -117,7 +117,8 @@ func (self *TReadability) fixImagesPath(node *goquery.Selection) {
 				src = f
 				img.SetAttr("src", f)
 				img.RemoveAttr("file")
-			} else {
+			}
+			if src == "" {
 				img.Remove()
 				return
 			}
