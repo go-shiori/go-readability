@@ -6,6 +6,7 @@ package readability
 import (
 	"compress/flate"
 	"compress/gzip"
+
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -54,7 +55,8 @@ func httpGet(url string) (string, error) {
 			return "", err
 		}
 	}
-	srcStr := string(bytes)
+
+	srcStr := strings.Replace(string(bytes), "&nbsp;", " ", -1)
 	pageCodes := pageCodeReg.FindStringSubmatch(srcStr)
 	if len(pageCodes) >= 2 {
 		curCode := strings.ToLower(pageCodes[1])
