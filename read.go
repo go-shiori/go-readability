@@ -125,7 +125,7 @@ func (self *TReadability) fixImagesPath(node *goquery.Selection) {
 			if src != "" {
 				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
 					var newSrc string
-					if !strings.HasPrefix(src, "/") {
+					if strings.HasPrefix(src, "/") {
 						newSrc = self.url.Scheme + "://" + self.url.Host + src
 					} else {
 						newSrc = self.url.Scheme + "://" + self.url.Host + self.url.Path + src
