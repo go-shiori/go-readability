@@ -21,7 +21,7 @@ package main
 import (
 	"fmt"
 	"github.com/RadhiFadlillah/go-readability"
-    "time"
+	"time"
 )
 
 func main() {
