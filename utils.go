@@ -53,13 +53,3 @@ func removeSeparator(str string, separators ...string) string {
 
 	return strings.Join(finalWords, " ")
 }
-
-func strContains(str string, substrs ...string) bool {
-	for _, substr := range substrs {
-		if strings.Contains(str, substr) {
-			return true
-		}
-	}
-
-	return false
-}

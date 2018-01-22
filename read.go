@@ -16,18 +16,17 @@ import (
 )
 
 var (
-	unlikelyCandidates   = regexp.MustCompile(`(?is)combx|comment|community|disqus|extra|foot|header|menu|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|location`)
+	unlikelyCandidates   = regexp.MustCompile(`(?is)combx|comment|community|disqus|extra|foot|header|menu|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|location|banner|breadcrumbs|cover-wrap|legends|related|replies|skyscraper|social|supplemental|yom-remote`)
 	okMaybeItsACandidate = regexp.MustCompile(`(?is)and|article|body|column|main|shadow`)
-	positive             = regexp.MustCompile(`(?is)article|body|content|entry|hentry|main|page|pagination|post|text|blog|story`)
-	negative             = regexp.MustCompile(`(?is)combx|comment|com|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|shopping|tags|tool|widget`)
-	extraneous           = regexp.MustCompile(`(?is)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single`)
-	divToPElements       = regexp.MustCompile(`(?is)<(a|blockquote|dl|div|img|ol|p|pre|table|ul)`)
+	positive             = regexp.MustCompile(`(?is)article|body|content|entry|h[\-]?entry|main|page|pagination|post|text|blog|story`)
+	negative             = regexp.MustCompile(`(?is)hidden|^hid$| hid$| hid |^hid |banner|share|skyscraper|combx|comment|com[\-]?|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|shopping|tags|tool|widget`)
+	extraneous           = regexp.MustCompile(`(?is)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
+	byline               = regexp.MustCompile(`(?is)byline|author|dateline|writtenby|p-author`)
+	divToPElements       = regexp.MustCompile(`(?is)<(a|blockquote|dl|div|img|ol|p|pre|table|ul|select)`)
 	replaceBrs           = regexp.MustCompile(`(?is)(<br[^>]*>[ \n\r\t]*){2,}`)
-	trim                 = regexp.MustCompile(`(?is)^\s+|\s+$`)
 	killBreaks           = regexp.MustCompile(`(?is)(<br\s*/?>(\s|&nbsp;?)*)+`)
-	videos               = regexp.MustCompile(`(?is)http://(www\.)?(youtube|vimeo)\.com`)
+	videos               = regexp.MustCompile(`(?is)//(www\.)?(dailymotion|youtube|youtube-nocookie|player\.vimeo|vimeo)\.com`)
 	unlikelyElements     = regexp.MustCompile(`(?is)(input|time|button)`)
-	bylineMatches        = []string{"byline", "author", "dateline", "writtenby", "p-author"}
 )
 
 type candidateItem struct {
@@ -286,7 +285,7 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 		}
 
 		// If byline, remove this element
-		if rel := s.AttrOr("rel", ""); rel == "author" || strContains(matchString, bylineMatches...) {
+		if rel := s.AttrOr("rel", ""); rel == "author" || byline.MatchString(matchString) {
 			s.Remove()
 			return
 		}

@@ -38,8 +38,3 @@ func main() {
 	fmt.Println(article.Content)
 }
 ```
-
-## Todo
-
-- [ ] Make this package safe to use concurrently.
-- [ ] Since regex in Go is [slow](https://github.com/golang/go/issues/11646), remove the regex wherever possible.
