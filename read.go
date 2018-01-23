@@ -376,7 +376,8 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 
 	// If top candidate found, return it
 	if topCandidate != nil {
-		return topCandidate.node, r.prepArticle(topCandidate.node)
+		finalContent := r.prepArticle(topCandidate.node)
+		return topCandidate.node, finalContent
 	}
 
 	return nil, ""
