@@ -175,14 +175,18 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 			metaName == "twitter:title" ||
 			metaName == "twitter:image" ||
 			metaName == "twitter:description" {
-			mapAttribute[metaName] = metaContent
+			if _, exist := mapAttribute[metaName]; !exist {
+				mapAttribute[metaName] = metaContent
+			}
 			return
 		}
 
 		if metaProperty == "og:description" ||
 			metaProperty == "og:image" ||
 			metaProperty == "og:title" {
-			mapAttribute[metaProperty] = metaContent
+			if _, exist := mapAttribute[metaProperty]; !exist {
+				mapAttribute[metaProperty] = metaContent
+			}
 			return
 		}
 	})
