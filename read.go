@@ -3,6 +3,7 @@ package readability
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	whatLang "github.com/abadojack/whatlanggo"
 	"golang.org/x/net/html"
 	ghtml "html"
 	"io/ioutil"
@@ -42,15 +43,19 @@ type readability struct {
 
 // Metadata is metadata of an article
 type Metadata struct {
-	Title   string
-	Excerpt string
-	Author  string
+	Title       string
+	Excerpt     string
+	Author      string
+	Language    string
+	MinReadTime int
+	MaxReadTime int
 }
 
 // Article is the content of an URL
 type Article struct {
-	Meta    Metadata
-	Content string
+	Meta       Metadata
+	Content    string
+	RawContent string
 }
 
 // Parse an URL to readability format
@@ -102,8 +107,19 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 	// Prepare document and fetch content
 	r.prepareDocument(doc)
 	meta := r.getArticleMetadata(doc)
-	contentNode, content := r.getArticleContent(doc)
-	content = strings.TrimSpace(content)
+	contentNode, rawContent := r.getArticleContent(doc)
+	rawContent = strings.TrimSpace(rawContent)
+
+	// Create text only content
+	words := strings.Fields(contentNode.Text())
+	content := strings.Join(words, " ")
+
+	// Check the language
+	lang := whatLang.DetectLang(content)
+	meta.Language = whatLang.LangToString(lang)
+
+	// Estimate read time
+	meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(meta.Language, contentNode)
 
 	// If we haven't found an excerpt in the article's metadata, use the article's
 	// first paragraph as the excerpt. This is used for displaying a preview of
@@ -113,7 +129,7 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 		meta.Excerpt = strings.TrimSpace(p)
 	}
 
-	return Article{Meta: meta, Content: content}, nil
+	return Article{Meta: meta, Content: content, RawContent: rawContent}, nil
 }
 
 // Prepare the HTML document for readability to scrape it.
@@ -247,7 +263,7 @@ func (r *readability) getArticleTitle(doc *goquery.Document) string {
 				}
 			}
 		}
-	} else if len(title) > 150 || len(title) < 15 {
+	} else if strLen(title) > 150 || strLen(title) < 15 {
 		hOne := doc.Find("h1").First()
 		if hOne != nil {
 			title = hOne.Text()
@@ -684,4 +700,83 @@ func (r *readability) fixRelativeURIs(node *goquery.Selection) {
 			}
 		}
 	})
+}
+
+func (r *readability) estimateReadTime(lang string, content *goquery.Selection) (int, int) {
+	if content == nil {
+		return 0, 0
+	}
+
+	// Get number of words and images
+	words := strings.Fields(content.Text())
+	contentText := strings.Join(words, " ")
+	nChar := strLen(contentText)
+	nImg := content.Find("img").Length()
+	if nChar == 0 && nImg == 0 {
+		return 0, 0
+	}
+
+	// Calculate character per minute by language
+	// Fallback to english
+	var cpm, sd float64
+	switch lang {
+	case "arb":
+		sd = 88
+		cpm = 612
+	case "nld":
+		sd = 143
+		cpm = 978
+	case "fin":
+		sd = 121
+		cpm = 1078
+	case "fra":
+		sd = 126
+		cpm = 998
+	case "deu":
+		sd = 86
+		cpm = 920
+	case "heb":
+		sd = 130
+		cpm = 833
+	case "ita":
+		sd = 140
+		cpm = 950
+	case "jpn":
+		sd = 56
+		cpm = 357
+	case "pol":
+		sd = 126
+		cpm = 916
+	case "por":
+		sd = 145
+		cpm = 913
+	case "rus":
+		sd = 175
+		cpm = 986
+	case "slv":
+		sd = 145
+		cpm = 885
+	case "spa":
+		sd = 127
+		cpm = 1025
+	case "swe":
+		sd = 156
+		cpm = 917
+	case "tur":
+		sd = 156
+		cpm = 1054
+	default:
+		sd = 188
+		cpm = 987
+	}
+
+	// Calculate read time, assumed one image requires 12 second (0.2 minute)
+	minReadTime := float64(nChar)/(cpm+sd) + float64(nImg)*0.2
+	maxReadTime := float64(nChar)/(cpm-sd) + float64(nImg)*0.2
+
+	// Round number
+	minReadTime = math.Floor(minReadTime + 0.5)
+	maxReadTime = math.Floor(maxReadTime + 0.5)
+
+	return int(minReadTime), int(maxReadTime)
 }
