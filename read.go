@@ -44,6 +44,7 @@ type readability struct {
 // Metadata is metadata of an article
 type Metadata struct {
 	Title       string
+	Image       string
 	Excerpt     string
 	Author      string
 	Language    string
@@ -172,16 +173,30 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 		if metaName == "title" ||
 			metaName == "description" ||
 			metaName == "twitter:title" ||
+			metaName == "twitter:image" ||
 			metaName == "twitter:description" {
 			mapAttribute[metaName] = metaContent
 			return
 		}
 
-		if metaProperty == "og:description" || metaProperty == "og:title" {
+		if metaProperty == "og:description" ||
+			metaProperty == "og:image" ||
+			metaProperty == "og:title" {
 			mapAttribute[metaProperty] = metaContent
 			return
 		}
 	})
+
+	// Set final image
+	if _, exist := mapAttribute["og:image"]; exist {
+		metadata.Image = mapAttribute["og:image"]
+	} else if _, exist := mapAttribute["twitter:image"]; exist {
+		metadata.Image = mapAttribute["twitter:image"]
+	}
+
+	if metadata.Image != "" && strings.HasPrefix(metadata.Image, "//") {
+		metadata.Image = "http:" + metadata.Image
+	}
 
 	// Set final description
 	if _, exist := mapAttribute["description"]; exist {
