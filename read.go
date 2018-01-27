@@ -54,6 +54,7 @@ type Metadata struct {
 
 // Article is the content of an URL
 type Article struct {
+	URL        string
 	Meta       Metadata
 	Content    string
 	RawContent string
@@ -61,6 +62,13 @@ type Article struct {
 
 // Parse an URL to readability format
 func Parse(url string, timeout time.Duration) (Article, error) {
+	// Make sure url is valid
+	parsedURL, err := nurl.Parse(url)
+	if err != nil {
+		return Article{}, err
+	}
+	url = parsedURL.String()
+
 	// Fetch page from URL
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
@@ -130,7 +138,7 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 		meta.Excerpt = strings.TrimSpace(p)
 	}
 
-	return Article{Meta: meta, Content: content, RawContent: rawContent}, nil
+	return Article{URL: url, Meta: meta, Content: content, RawContent: rawContent}, nil
 }
 
 // Prepare the HTML document for readability to scrape it.
