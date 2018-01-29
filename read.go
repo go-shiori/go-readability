@@ -118,24 +118,27 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 	meta := r.getArticleMetadata(doc)
 	contentNode, rawContent := r.getArticleContent(doc)
 	rawContent = strings.TrimSpace(rawContent)
+	content := ""
 
-	// Create text only content
-	words := strings.Fields(contentNode.Text())
-	content := strings.Join(words, " ")
+	if contentNode != nil {
+		// Create text only content
+		words := strings.Fields(contentNode.Text())
+		content := strings.Join(words, " ")
 
-	// Check the language
-	lang := whatLang.DetectLang(content)
-	meta.Language = whatLang.LangToString(lang)
+		// Check the language
+		lang := whatLang.DetectLang(content)
+		meta.Language = whatLang.LangToString(lang)
 
-	// Estimate read time
-	meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(meta.Language, contentNode)
+		// Estimate read time
+		meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(meta.Language, contentNode)
 
-	// If we haven't found an excerpt in the article's metadata, use the article's
-	// first paragraph as the excerpt. This is used for displaying a preview of
-	// the article's content.
-	if meta.Excerpt == "" {
-		p := contentNode.Find("p").First().Text()
-		meta.Excerpt = strings.TrimSpace(p)
+		// If we haven't found an excerpt in the article's metadata, use the article's
+		// first paragraph as the excerpt. This is used for displaying a preview of
+		// the article's content.
+		if meta.Excerpt == "" {
+			p := contentNode.Find("p").First().Text()
+			meta.Excerpt = strings.TrimSpace(p)
+		}
 	}
 
 	return Article{URL: url, Meta: meta, Content: content, RawContent: rawContent}, nil
