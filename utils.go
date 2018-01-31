@@ -53,3 +53,7 @@ func removeSeparator(str string, separators ...string) string {
 
 	return strings.Join(finalWords, " ")
 }
+
+func normalizeText(str string) string {
+	return strings.Join(strings.Fields(str), "")
+}

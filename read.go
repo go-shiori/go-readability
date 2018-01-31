@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	whatLang "github.com/abadojack/whatlanggo"
-	"golang.org/x/net/html"
 	ghtml "html"
 	"io/ioutil"
 	"math"
@@ -17,17 +16,20 @@ import (
 )
 
 var (
-	unlikelyCandidates   = regexp.MustCompile(`(?is)combx|comment|community|disqus|extra|foot|header|menu|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|location|banner|breadcrumbs|cover-wrap|legends|related|replies|skyscraper|social|supplemental|yom-remote`)
+	unlikelyCandidates   = regexp.MustCompile(`(?is)banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|foot|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
 	okMaybeItsACandidate = regexp.MustCompile(`(?is)and|article|body|column|main|shadow`)
-	positive             = regexp.MustCompile(`(?is)article|body|content|entry|h[\-]?entry|main|page|pagination|post|text|blog|story`)
-	negative             = regexp.MustCompile(`(?is)hidden|^hid$| hid$| hid |^hid |banner|share|skyscraper|combx|comment|com[\-]?|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|shopping|tags|tool|widget`)
+	positive             = regexp.MustCompile(`(?is)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
+	negative             = regexp.MustCompile(`(?is)hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
 	extraneous           = regexp.MustCompile(`(?is)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
 	byline               = regexp.MustCompile(`(?is)byline|author|dateline|writtenby|p-author`)
 	divToPElements       = regexp.MustCompile(`(?is)<(a|blockquote|dl|div|img|ol|p|pre|table|ul|select)`)
 	replaceBrs           = regexp.MustCompile(`(?is)(<br[^>]*>[ \n\r\t]*){2,}`)
 	killBreaks           = regexp.MustCompile(`(?is)(<br\s*/?>(\s|&nbsp;?)*)+`)
-	videos               = regexp.MustCompile(`(?is)//(www\.)?(dailymotion|youtube|youtube-nocookie|player\.vimeo|vimeo)\.com`)
+	videos               = regexp.MustCompile(`(?is)//(www\.)?(dailymotion|youtube|youtube-nocookie|player\.vimeo)\.com`)
 	unlikelyElements     = regexp.MustCompile(`(?is)(input|time|button)`)
+	pIsSentence          = regexp.MustCompile(`(?is)\.( |$)`)
+	spaces               = regexp.MustCompile(`(?is)\s{2,}`)
+	comments             = regexp.MustCompile(`(?is)<!--[^>]+-->`)
 )
 
 type candidateItem struct {
@@ -248,7 +250,7 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 func (r *readability) getArticleTitle(doc *goquery.Document) string {
 	// Get title tag
 	title := doc.Find("title").First().Text()
-	title = strings.TrimSpace(title)
+	title = normalizeText(title)
 	originalTitle := title
 
 	// Create list of separator
@@ -305,11 +307,9 @@ func (r *readability) getArticleTitle(doc *goquery.Document) string {
 	} else if strLen(title) > 150 || strLen(title) < 15 {
 		hOne := doc.Find("h1").First()
 		if hOne != nil {
-			title = hOne.Text()
+			title = normalizeText(hOne.Text())
 		}
 	}
-
-	title = strings.TrimSpace(title)
 
 	// If we now have 4 words or fewer as our title, and either no
 	// 'hierarchical' separators (\, /, > or ») were found in the original
@@ -333,12 +333,6 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 	doc.Find("*").Each(func(i int, s *goquery.Selection) {
 		matchString := s.AttrOr("class", "") + " " + s.AttrOr("id", "")
 
-		// If comment, remove this element
-		if s.Nodes[0].Type == html.CommentNode {
-			s.Remove()
-			return
-		}
-
 		// If byline, remove this element
 		if rel := s.AttrOr("rel", ""); rel == "author" || byline.MatchString(matchString) {
 			s.Remove()
@@ -348,7 +342,7 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 		// Remove unlikely candidates
 		if unlikelyCandidates.MatchString(matchString) &&
 			!okMaybeItsACandidate.MatchString(matchString) &&
-			!s.Is("body") {
+			!s.Is("body") && !s.Is("a") {
 			s.Remove()
 			return
 		}
@@ -378,37 +372,52 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 	// A score is determined by things like number of commas, class names, etc. Maybe eventually link density.
 	r.candidates = make(map[string]candidateItem)
 	doc.Find("p").Each(func(i int, s *goquery.Selection) {
-		parentNode := s.Parent()
-		grandParentNode := parentNode.Parent()
-		innerText := s.Text()
-
-		if parentNode == nil || strLen(innerText) < 25 {
+		// If this paragraph is less than 25 characters, don't even count it.
+		innerText := normalizeText(s.Text())
+		if strLen(innerText) < 25 {
 			return
 		}
 
-		parentHash := hashStr(parentNode)
-		if _, ok := r.candidates[parentHash]; !ok {
-			r.candidates[parentHash] = r.initializeNodeScore(parentNode)
+		// Exclude nodes with no ancestor.
+		ancestors := r.getNodeAncestors(s, 3)
+		if len(ancestors) == 0 {
+			return
 		}
 
-		grandParentHash := hashStr(grandParentNode)
-		if _, ok := r.candidates[grandParentHash]; !ok {
-			r.candidates[grandParentHash] = r.initializeNodeScore(grandParentNode)
-		}
-
+		// Calculate content score
+		// Add a point for the paragraph itself as a base.
 		contentScore := 1.0
+
+		// Add points for any commas within this paragraph.
 		contentScore += float64(strings.Count(innerText, ","))
 		contentScore += float64(strings.Count(innerText, "，"))
+
+		// For every 100 characters in this paragraph, add another point. Up to 3 points.
 		contentScore += math.Min(math.Floor(float64(strLen(innerText)/100)), 3)
 
-		candidate := r.candidates[parentHash]
-		candidate.score += contentScore
-		r.candidates[parentHash] = candidate
+		// Initialize and score ancestors.
+		for level, ancestor := range ancestors {
+			// Node score divider:
+			// - parent:             1 (no division)
+			// - grandparent:        2
+			// - great grandparent+: ancestor level * 3
+			scoreDivider := 0
+			if level == 0 {
+				scoreDivider = 1
+			} else if level == 1 {
+				scoreDivider = 2
+			} else {
+				scoreDivider = level * 3
+			}
 
-		if grandParentNode != nil {
-			candidate = r.candidates[grandParentHash]
-			candidate.score += contentScore / 2.0
-			r.candidates[grandParentHash] = candidate
+			ancestorHash := hashStr(ancestor)
+			if _, ok := r.candidates[ancestorHash]; !ok {
+				r.candidates[ancestorHash] = r.initializeNodeScore(ancestor)
+			}
+
+			candidate := r.candidates[ancestorHash]
+			candidate.score += contentScore / float64(scoreDivider)
+			r.candidates[ancestorHash] = candidate
 		}
 	})
 
@@ -429,13 +438,13 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 		}
 	}
 
-	// If top candidate found, return it
-	if topCandidate != nil {
-		finalContent := r.prepArticle(topCandidate.node)
-		return topCandidate.node, finalContent
+	// If top candidate not found, stop
+	if topCandidate == nil {
+		return nil, ""
 	}
 
-	return nil, ""
+	finalContent := r.prepArticle(topCandidate.node)
+	return topCandidate.node, finalContent
 }
 
 // Check if a node is empty
@@ -453,6 +462,33 @@ func (r *readability) getTagName(s *goquery.Selection) string {
 	return s.Nodes[0].Data
 }
 
+func (r *readability) getNodeAncestors(node *goquery.Selection, maxDepth int) []*goquery.Selection {
+	ancestors := []*goquery.Selection{}
+	parent := *node
+
+	for i := 0; i < maxDepth; i++ {
+		parent = *parent.Parent()
+		if len(parent.Nodes) == 0 {
+			return ancestors
+		}
+
+		ancestors = append(ancestors, &parent)
+	}
+
+	return ancestors
+}
+
+// Check if a given node has one of its ancestor tag name matching the provided one.
+func (r *readability) hasAncestorTag(node *goquery.Selection, tag string) bool {
+	for parent := *node; len(parent.Nodes) > 0; parent = *parent.Parent() {
+		if parent.Nodes[0].Data == tag {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Initialize a node and checks the className/id for special names
 // to add to its score.
 func (r *readability) initializeNodeScore(node *goquery.Selection) candidateItem {
@@ -466,7 +502,7 @@ func (r *readability) initializeNodeScore(node *goquery.Selection) candidateItem
 		contentScore += 5
 	case "pre", "blockquote", "td":
 		contentScore += 3
-	case "form", "ol", "dl", "dd", "dt", "li", "address":
+	case "form", "ol", "ul", "dl", "dd", "dt", "li", "address":
 		contentScore -= 3
 	case "th", "h1", "h2", "h3", "h4", "h5", "h6":
 		contentScore -= 5
@@ -510,7 +546,7 @@ func (r *readability) getLinkDensity(node *goquery.Selection) float64 {
 		return 0
 	}
 
-	textLength := strLen(node.Text())
+	textLength := strLen(normalizeText(node.Text()))
 	if textLength == 0 {
 		return 0
 	}
@@ -540,6 +576,7 @@ func (r *readability) prepArticle(content *goquery.Selection) string {
 	r.clean(content, "object")
 	r.clean(content, "embed")
 	r.clean(content, "footer")
+	r.clean(content, "link")
 
 	// If there is only one h2 or h3 and its text content substantially equals article title,
 	// they are probably using it as a header and not a subheader,
@@ -568,11 +605,14 @@ func (r *readability) prepArticle(content *goquery.Selection) string {
 	// Fix all relative URL
 	r.fixRelativeURIs(content)
 
-	// Last time, clean all empty tags
+	// Last time, clean all empty tags and remove class name
 	content.Find("*").Each(func(_ int, s *goquery.Selection) {
 		if r.isElementEmpty(s) {
 			s.Remove()
 		}
+
+		s.RemoveAttr("class")
+		s.RemoveAttr("id")
 	})
 
 	html, err := content.Html()
@@ -581,20 +621,42 @@ func (r *readability) prepArticle(content *goquery.Selection) string {
 	}
 
 	html = ghtml.UnescapeString(html)
-	return killBreaks.ReplaceAllString(html, "<br />")
+	html = comments.ReplaceAllString(html, "")
+	html = killBreaks.ReplaceAllString(html, "<br />")
+	html = spaces.ReplaceAllString(html, " ")
+	return html
 }
 
 // Remove the style attribute on every e and under.
 func (r *readability) cleanStyle(s *goquery.Selection) {
 	s.Find("*").Each(func(i int, s1 *goquery.Selection) {
-		s1.RemoveAttr("class")
-		s1.RemoveAttr("id")
+		tagName := s1.Nodes[0].Data
+		if tagName == "svg" {
+			return
+		}
+
+		s1.RemoveAttr("align")
+		s1.RemoveAttr("background")
+		s1.RemoveAttr("bgcolor")
+		s1.RemoveAttr("border")
+		s1.RemoveAttr("cellpadding")
+		s1.RemoveAttr("cellspacing")
+		s1.RemoveAttr("frame")
+		s1.RemoveAttr("hspace")
+		s1.RemoveAttr("rules")
 		s1.RemoveAttr("style")
-		s1.RemoveAttr("width")
-		s1.RemoveAttr("height")
+		s1.RemoveAttr("valign")
+		s1.RemoveAttr("vspace")
 		s1.RemoveAttr("onclick")
 		s1.RemoveAttr("onmouseover")
 		s1.RemoveAttr("border")
+		s1.RemoveAttr("style")
+
+		if tagName != "table" && tagName != "th" && tagName != "td" &&
+			tagName != "hr" && tagName != "pre" {
+			s1.RemoveAttr("width")
+			s1.RemoveAttr("height")
+		}
 	})
 }
 
@@ -635,54 +697,48 @@ func (r *readability) cleanConditionally(e *goquery.Selection, tag string) {
 		return
 	}
 
-	contentScore := 0.0
-	e.Find(tag).Each(func(i int, node *goquery.Selection) {
-		hashNode := hashStr(node)
-		if candidate, ok := r.candidates[hashNode]; ok {
-			contentScore = candidate.score
-		} else {
-			contentScore = 0
-		}
+	isList := tag == "ul" || tag == "ol"
 
+	e.Find(tag).Each(func(i int, node *goquery.Selection) {
+		contentScore := 0.0
 		weight := r.getClassWeight(node)
 		if weight+contentScore < 0 {
 			node.Remove()
 			return
 		}
 
-		p := node.Find("p").Length()
-		img := node.Find("img").Length()
-		li := node.Find("li").Length() - 100
-		input := node.Find("input").Length()
+		// If there are not very many commas, and the number of
+		// non-paragraph elements is more than paragraphs or other
+		// ominous signs, remove the element.
+		nodeText := normalizeText(node.Text())
+		nCommas := strings.Count(nodeText, ",")
+		nCommas += strings.Count(nodeText, "，")
+		if nCommas < 10 {
+			p := node.Find("p").Length()
+			img := node.Find("img").Length()
+			li := node.Find("li").Length() - 100
+			input := node.Find("input").Length()
 
-		embedCount := 0
-		node.Find("embed").Each(func(i int, embed *goquery.Selection) {
-			if !videos.MatchString(embed.AttrOr("src", "")) {
-				embedCount++
+			embedCount := 0
+			node.Find("embed").Each(func(i int, embed *goquery.Selection) {
+				if !videos.MatchString(embed.AttrOr("src", "")) {
+					embedCount++
+				}
+			})
+
+			linkDensity := r.getLinkDensity(node)
+			contentLength := strLen(normalizeText(node.Text()))
+			haveToRemove := (!isList && li > p) ||
+				(img > 1 && float64(p)/float64(img) < 0.5 && !r.hasAncestorTag(node, "figure")) ||
+				(float64(input) > math.Floor(float64(p)/3)) ||
+				(!isList && contentLength < 25 && (img == 0 || img > 2) && !r.hasAncestorTag(node, "figure")) ||
+				(!isList && weight < 25 && linkDensity > 0.2) ||
+				(weight >= 25 && linkDensity > 0.5) ||
+				((embedCount == 1 && contentLength < 75) || embedCount > 1)
+
+			if haveToRemove {
+				node.Remove()
 			}
-		})
-
-		linkDensity := r.getLinkDensity(node)
-		contentLength := strLen(node.Text())
-		toRemove := false
-		if img > p && img > 1 {
-			toRemove = true
-		} else if li > p && tag != "ul" && tag != "ol" {
-			toRemove = true
-		} else if input > int(math.Floor(float64(p/3))) {
-			toRemove = true
-		} else if contentLength < 25 && (img == 0 || img > 2) {
-			toRemove = true
-		} else if weight < 25 && linkDensity > 0.2 {
-			toRemove = true
-		} else if weight >= 25 && linkDensity > 0.5 {
-			toRemove = true
-		} else if (embedCount == 1 && contentLength < 35) || embedCount > 1 {
-			toRemove = true
-		}
-
-		if toRemove {
-			node.Remove()
 		}
 	})
 }
