@@ -122,8 +122,17 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 
 	if contentNode != nil {
 		// Create text only content
-		words := strings.Fields(contentNode.Text())
-		content = strings.Join(words, " ")
+		paragraphs := []string{}
+		for _, p := range strings.Split(contentNode.Text(), "\n") {
+			words := strings.Fields(p)
+			p = strings.Join(words, " ")
+
+			if p != "" {
+				paragraphs = append(paragraphs, p)
+			}
+		}
+
+		content = strings.Join(paragraphs, "\n\n")
 
 		// Check the language
 		lang := whatLang.DetectLang(content)
