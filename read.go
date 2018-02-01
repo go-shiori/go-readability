@@ -71,7 +71,6 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 	if err != nil {
 		return Article{}, err
 	}
-	url = parsedURL.String()
 
 	// Fetch page from URL
 	client := &http.Client{Timeout: timeout}
@@ -107,13 +106,8 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 	}
 
 	// Create new readability
-	srcURL, err := nurl.Parse(url)
-	if err != nil {
-		return Article{}, err
-	}
-
 	r := readability{
-		url:        srcURL,
+		url:        parsedURL,
 		candidates: make(map[string]candidateItem),
 	}
 
@@ -121,27 +115,27 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 	r.prepareDocument(doc)
 	contentNode := r.getArticleContent(doc)
 
-	// Check if node is empty
-	if contentNode == nil {
-		return Article{}, err
-	}
-
 	// Get article metadata
 	meta := r.getArticleMetadata(doc)
 	meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(contentNode)
 
-	// If we haven't found an excerpt in the article's metadata, use the first paragraph
-	if meta.Excerpt == "" {
-		p := contentNode.Find("p").First().Text()
-		meta.Excerpt = normalizeText(p)
+	// Get text and HTML from content
+	textContent := ""
+	htmlContent := ""
+	if contentNode != nil {
+		// If we haven't found an excerpt in the article's metadata, use the first paragraph
+		if meta.Excerpt == "" {
+			p := contentNode.Find("p").First().Text()
+			meta.Excerpt = normalizeText(p)
+		}
+
+		// Get content text and HTML
+		textContent = r.getTextContent(contentNode)
+		htmlContent = r.getHTMLContent(contentNode)
 	}
 
-	// Get content text and HTML
-	textContent := r.getTextContent(contentNode)
-	htmlContent := r.getHTMLContent(contentNode)
-
 	article := Article{
-		URL:        url,
+		URL:        parsedURL.String(),
 		Meta:       meta,
 		Content:    textContent,
 		RawContent: htmlContent,
