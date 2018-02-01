@@ -1,9 +1,12 @@
 package readability
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	whatLang "github.com/abadojack/whatlanggo"
+	wl "github.com/abadojack/whatlanggo"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	ghtml "html"
 	"io/ioutil"
 	"math"
@@ -49,7 +52,6 @@ type Metadata struct {
 	Image       string
 	Excerpt     string
 	Author      string
-	Language    string
 	MinReadTime int
 	MaxReadTime int
 }
@@ -117,42 +119,35 @@ func Parse(url string, timeout time.Duration) (Article, error) {
 
 	// Prepare document and fetch content
 	r.prepareDocument(doc)
-	meta := r.getArticleMetadata(doc)
-	contentNode, rawContent := r.getArticleContent(doc)
-	rawContent = strings.TrimSpace(rawContent)
-	content := ""
+	contentNode := r.getArticleContent(doc)
 
-	if contentNode != nil {
-		// Create text only content
-		paragraphs := []string{}
-		for _, p := range strings.Split(contentNode.Text(), "\n") {
-			words := strings.Fields(p)
-			p = strings.Join(words, " ")
-
-			if p != "" {
-				paragraphs = append(paragraphs, p)
-			}
-		}
-
-		content = strings.Join(paragraphs, "\n\n")
-
-		// Check the language
-		lang := whatLang.DetectLang(content)
-		meta.Language = whatLang.LangToString(lang)
-
-		// Estimate read time
-		meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(meta.Language, contentNode)
-
-		// If we haven't found an excerpt in the article's metadata, use the article's
-		// first paragraph as the excerpt. This is used for displaying a preview of
-		// the article's content.
-		if meta.Excerpt == "" {
-			p := contentNode.Find("p").First().Text()
-			meta.Excerpt = strings.TrimSpace(p)
-		}
+	// Check if node is empty
+	if contentNode == nil {
+		return Article{}, err
 	}
 
-	return Article{URL: url, Meta: meta, Content: content, RawContent: rawContent}, nil
+	// Get article metadata
+	meta := r.getArticleMetadata(doc)
+	meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(contentNode)
+
+	// If we haven't found an excerpt in the article's metadata, use the first paragraph
+	if meta.Excerpt == "" {
+		p := contentNode.Find("p").First().Text()
+		meta.Excerpt = normalizeText(p)
+	}
+
+	// Get content text and HTML
+	textContent := r.getTextContent(contentNode)
+	htmlContent := r.getHTMLContent(contentNode)
+
+	article := Article{
+		URL:        url,
+		Meta:       meta,
+		Content:    textContent,
+		RawContent: htmlContent,
+	}
+
+	return article, nil
 }
 
 // Prepare the HTML document for readability to scrape it.
@@ -326,7 +321,7 @@ func (r *readability) getArticleTitle(doc *goquery.Document) string {
 
 // Using a variety of metrics (content score, classname, element types), find the content that is
 // most likely to be the stuff a user wants to read. Then return it wrapped up in a div.
-func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selection, string) {
+func (r *readability) getArticleContent(doc *goquery.Document) *goquery.Selection {
 	// First, node prepping. Trash nodes that look cruddy (like ones with the
 	// class name "comment", etc), and turn divs into P tags where they have been
 	// used inappropriately (as in, where they contain no other block level elements.)
@@ -440,11 +435,11 @@ func (r *readability) getArticleContent(doc *goquery.Document) (*goquery.Selecti
 
 	// If top candidate not found, stop
 	if topCandidate == nil {
-		return nil, ""
+		return nil
 	}
 
-	finalContent := r.prepArticle(topCandidate.node)
-	return topCandidate.node, finalContent
+	r.prepArticle(topCandidate.node)
+	return topCandidate.node
 }
 
 // Check if a node is empty
@@ -561,9 +556,9 @@ func (r *readability) getLinkDensity(node *goquery.Selection) float64 {
 
 // Prepare the article node for display. Clean out any inline styles,
 // iframes, forms, strip extraneous <p> tags, etc.
-func (r *readability) prepArticle(content *goquery.Selection) string {
+func (r *readability) prepArticle(content *goquery.Selection) {
 	if content == nil {
-		return ""
+		return
 	}
 
 	// Remove styling attribute
@@ -614,17 +609,6 @@ func (r *readability) prepArticle(content *goquery.Selection) string {
 		s.RemoveAttr("class")
 		s.RemoveAttr("id")
 	})
-
-	html, err := content.Html()
-	if err != nil {
-		return ""
-	}
-
-	html = ghtml.UnescapeString(html)
-	html = comments.ReplaceAllString(html, "")
-	html = killBreaks.ReplaceAllString(html, "<br />")
-	html = spaces.ReplaceAllString(html, " ")
-	return html
 }
 
 // Remove the style attribute on every e and under.
@@ -797,14 +781,18 @@ func (r *readability) fixRelativeURIs(node *goquery.Selection) {
 	})
 }
 
-func (r *readability) estimateReadTime(lang string, content *goquery.Selection) (int, int) {
+// Estimate read time based on the language number of character in contents.
+// Using data from http://iovs.arvojournals.org/article.aspx?articleid=2166061
+func (r *readability) estimateReadTime(content *goquery.Selection) (int, int) {
 	if content == nil {
 		return 0, 0
 	}
 
+	// Check the language
+	contentText := normalizeText(content.Text())
+	lang := wl.LangToString(wl.DetectLang(contentText))
+
 	// Get number of words and images
-	words := strings.Fields(content.Text())
-	contentText := strings.Join(words, " ")
 	nChar := strLen(contentText)
 	nImg := content.Find("img").Length()
 	if nChar == 0 && nImg == 0 {
@@ -874,4 +862,54 @@ func (r *readability) estimateReadTime(lang string, content *goquery.Selection) 
 	maxReadTime = math.Floor(maxReadTime + 0.5)
 
 	return int(minReadTime), int(maxReadTime)
+}
+
+func (r *readability) getHTMLContent(content *goquery.Selection) string {
+	html, err := content.Html()
+	if err != nil {
+		return ""
+	}
+
+	html = ghtml.UnescapeString(html)
+	html = comments.ReplaceAllString(html, "")
+	html = killBreaks.ReplaceAllString(html, "<br />")
+	html = spaces.ReplaceAllString(html, " ")
+	return html
+}
+
+func (r *readability) getTextContent(content *goquery.Selection) string {
+	var buf bytes.Buffer
+
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			nodeText := normalizeText(n.Data)
+			if nodeText != "" {
+				buf.WriteString(nodeText)
+			}
+		} else if n.Parent != nil && n.Parent.DataAtom != atom.P {
+			buf.WriteString("|X|")
+		}
+
+		if n.FirstChild != nil {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				f(c)
+			}
+		}
+	}
+
+	for _, n := range content.Nodes {
+		f(n)
+	}
+
+	finalContent := ""
+	paragraphs := strings.Split(buf.String(), "|X|")
+	for _, paragraph := range paragraphs {
+		if paragraph != "" {
+			finalContent += paragraph + "\n\n"
+		}
+	}
+
+	finalContent = strings.TrimSpace(finalContent)
+	return finalContent
 }

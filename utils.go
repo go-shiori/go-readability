@@ -55,5 +55,5 @@ func removeSeparator(str string, separators ...string) string {
 }
 
 func normalizeText(str string) string {
-	return strings.Join(strings.Fields(str), "")
+	return strings.Join(strings.Fields(str), " ")
 }
