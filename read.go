@@ -767,9 +767,10 @@ func (r *readability) fixRelativeURIs(node *goquery.Selection) {
 				newHref := nurl.URL(*r.url)
 				if strings.HasPrefix(href, "/") {
 					newHref.Path = href
-				} else {
+				} else if !strings.HasPrefix(href, "#") {
 					newHref.Path = pt.Join(newHref.Path, href)
 				}
+				link.SetAttr("href", newHref.String())
 			}
 		}
 	})
