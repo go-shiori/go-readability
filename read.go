@@ -445,7 +445,7 @@ func (r *readability) isElementEmpty(s *goquery.Selection) bool {
 
 // Get tag name from a node
 func (r *readability) getTagName(s *goquery.Selection) string {
-	if s == nil {
+	if s == nil || len(s.Nodes) == 0 {
 		return ""
 	}
 	return s.Nodes[0].Data
