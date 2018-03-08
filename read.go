@@ -941,6 +941,10 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 		return uri
 	}
 
+	if tempURI, _ := nurl.Parse(uri); tempURI.Scheme != "" {
+		return uri
+	}
+
 	newURI := nurl.URL(*base)
 	newURI.Path = uri
 
