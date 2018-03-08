@@ -3,36 +3,36 @@ package readability
 import (
 	"bytes"
 	"fmt"
+	ghtml "html"
+	"math"
+	"net/http"
+	nurl "net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/PuerkitoBio/goquery"
 	wl "github.com/abadojack/whatlanggo"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	ghtml "html"
-	"io/ioutil"
-	"math"
-	"net/http"
-	nurl "net/url"
-	pt "path"
-	"regexp"
-	"strings"
-	"time"
 )
 
 var (
-	unlikelyCandidates   = regexp.MustCompile(`(?is)banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|foot|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
-	okMaybeItsACandidate = regexp.MustCompile(`(?is)and|article|body|column|main|shadow`)
-	positive             = regexp.MustCompile(`(?is)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
-	negative             = regexp.MustCompile(`(?is)hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
-	extraneous           = regexp.MustCompile(`(?is)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
-	byline               = regexp.MustCompile(`(?is)byline|author|dateline|writtenby|p-author`)
-	divToPElements       = regexp.MustCompile(`(?is)<(a|blockquote|dl|div|img|ol|p|pre|table|ul|select)`)
-	replaceBrs           = regexp.MustCompile(`(?is)(<br[^>]*>[ \n\r\t]*){2,}`)
-	killBreaks           = regexp.MustCompile(`(?is)(<br\s*/?>(\s|&nbsp;?)*)+`)
-	videos               = regexp.MustCompile(`(?is)//(www\.)?(dailymotion|youtube|youtube-nocookie|player\.vimeo)\.com`)
-	unlikelyElements     = regexp.MustCompile(`(?is)(input|time|button)`)
-	pIsSentence          = regexp.MustCompile(`(?is)\.( |$)`)
-	spaces               = regexp.MustCompile(`(?is)\s{2,}`)
-	comments             = regexp.MustCompile(`(?is)<!--[^>]+-->`)
+	dataTableAttr          = "XXX-DATA-TABLE"
+	rxSpaces               = regexp.MustCompile(`(?is)\s{2,}|\n+`)
+	rxReplaceBrs           = regexp.MustCompile(`(?is)(<br[^>]*>[ \n\r\t]*){2,}`)
+	rxByline               = regexp.MustCompile(`(?is)byline|author|dateline|writtenby|p-author`)
+	rxUnlikelyCandidates   = regexp.MustCompile(`(?is)banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|foot|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
+	rxOkMaybeItsACandidate = regexp.MustCompile(`(?is)and|article|body|column|main|shadow`)
+	rxUnlikelyElements     = regexp.MustCompile(`(?is)(input|time|button)`)
+	rxDivToPElements       = regexp.MustCompile(`(?is)<(a|blockquote|dl|div|img|ol|p|pre|table|ul|select)`)
+	rxPositive             = regexp.MustCompile(`(?is)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
+	rxNegative             = regexp.MustCompile(`(?is)hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
+	rxPIsSentence          = regexp.MustCompile(`(?is)\.( |$)`)
+	rxVideos               = regexp.MustCompile(`(?is)//(www\.)?(dailymotion|youtube|youtube-nocookie|player\.vimeo)\.com`)
+	rxKillBreaks           = regexp.MustCompile(`(?is)(<br\s*/?>(\s|&nbsp;?)*)+`)
+	rxComments             = regexp.MustCompile(`(?is)<!--[^>]+-->`)
 )
 
 type candidateItem struct {
@@ -64,94 +64,57 @@ type Article struct {
 	RawContent string
 }
 
-// Parse an URL to readability format
-func Parse(url string, timeout time.Duration) (Article, error) {
-	// Make sure url is valid
-	parsedURL, err := nurl.Parse(url)
-	if err != nil {
-		return Article{}, err
-	}
-
+func fetchURL(url *nurl.URL, timeout time.Duration) (*goquery.Document, error) {
 	// Fetch page from URL
 	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(url)
+	resp, err := client.Get(url.String())
 	if err != nil {
-		return Article{}, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	btHTML, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return Article{}, err
-	}
-	strHTML := string(btHTML)
-
-	// Replaces 2 or more successive <br> elements with a single <p>.
-	// Whitespace between <br> elements are ignored. For example:
-	//   <div>foo<br>bar<br> <br><br>abc</div>
-	// will become:
-	//   <div>foo<br>bar<p>abc</p></div>
-	strHTML = replaceBrs.ReplaceAllString(strHTML, "</p><p>")
-	strHTML = strings.TrimSpace(strHTML)
-
-	// Check if HTML page is empty
-	if strHTML == "" {
-		return Article{}, fmt.Errorf("HTML is empty")
-	}
-
 	// Create goquery document
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(strHTML))
-	if err != nil {
-		return Article{}, err
-	}
-
-	// Create new readability
-	r := readability{
-		url:        parsedURL,
-		candidates: make(map[string]candidateItem),
-	}
-
-	// Prepare document and fetch content
-	r.prepareDocument(doc)
-	contentNode := r.getArticleContent(doc)
-
-	// Get article metadata
-	meta := r.getArticleMetadata(doc)
-	meta.MinReadTime, meta.MaxReadTime = r.estimateReadTime(contentNode)
-
-	// Get text and HTML from content
-	textContent := ""
-	htmlContent := ""
-	if contentNode != nil {
-		// If we haven't found an excerpt in the article's metadata, use the first paragraph
-		if meta.Excerpt == "" {
-			p := contentNode.Find("p").First().Text()
-			meta.Excerpt = normalizeText(p)
-		}
-
-		// Get content text and HTML
-		textContent = r.getTextContent(contentNode)
-		htmlContent = r.getHTMLContent(contentNode)
-	}
-
-	article := Article{
-		URL:        parsedURL.String(),
-		Meta:       meta,
-		Content:    textContent,
-		RawContent: htmlContent,
-	}
-
-	return article, nil
+	return goquery.NewDocumentFromReader(resp.Body)
 }
 
-// Prepare the HTML document for readability to scrape it.
-// This includes things like stripping Javascript, CSS, and handling terrible markup.
-func (r *readability) prepareDocument(doc *goquery.Document) {
-	// Remove tags
+// removeScripts removes script tags from the document.
+func removeScripts(doc *goquery.Document) {
 	doc.Find("script").Remove()
 	doc.Find("noscript").Remove()
+}
+
+// replaceBrs replaces 2 or more successive <br> elements with a single <p>.
+// Whitespace between <br> elements are ignored. For example:
+//   <div>foo<br>bar<br> <br><br>abc</div>
+// will become:
+//   <div>foo<br>bar<p>abc</p></div>
+func replaceBrs(doc *goquery.Document) {
+	// Remove BRs in body
+	body := doc.Find("body")
+
+	html, _ := body.Html()
+	html = rxReplaceBrs.ReplaceAllString(html, "</p><p>")
+
+	body.SetHtml(html)
+
+	// Remove empty p
+	body.Find("p").Each(func(_ int, p *goquery.Selection) {
+		html, _ := p.Html()
+		html = strings.TrimSpace(html)
+		if html == "" {
+			p.Remove()
+		}
+	})
+}
+
+// prepDocument prepares the HTML document for readability to scrape it.
+// This includes things like stripping JS, CSS, and handling terrible markup.
+func prepDocument(doc *goquery.Document) {
+	// Remove all style tags in head
 	doc.Find("style").Remove()
-	doc.Find("link").Remove()
+
+	// Replace all br
+	replaceBrs(doc)
 
 	// Replace font tags to span
 	doc.Find("font").Each(func(_ int, font *goquery.Selection) {
@@ -160,8 +123,86 @@ func (r *readability) prepareDocument(doc *goquery.Document) {
 	})
 }
 
-// Attempts to get metadata for the article.
-func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
+// getArticleTitle fetchs the article title
+func getArticleTitle(doc *goquery.Document) string {
+	// Get title tag
+	title := doc.Find("title").First().Text()
+	title = normalizeText(title)
+	originalTitle := title
+
+	// Create list of separator
+	separators := []string{`|`, `-`, `\`, `/`, `>`, `»`}
+	hierarchialSeparators := []string{`\`, `/`, `>`, `»`}
+
+	// If there's a separator in the title, first remove the final part
+	titleHadHierarchicalSeparators := false
+	if idx, sep := findSeparator(title, separators...); idx != -1 {
+		titleHadHierarchicalSeparators = hasSeparator(title, hierarchialSeparators...)
+
+		index := strings.LastIndex(originalTitle, sep)
+		title = originalTitle[:index]
+
+		// If the resulting title is too short (3 words or fewer), remove
+		// the first part instead:
+		if len(strings.Fields(title)) < 3 {
+			index = strings.Index(originalTitle, sep)
+			title = originalTitle[index+1:]
+		}
+	} else if strings.Contains(title, ": ") {
+		// Check if we have an heading containing this exact string, so we
+		// could assume it's the full title.
+		existInHeading := false
+		doc.Find("h1,h2").EachWithBreak(func(_ int, heading *goquery.Selection) bool {
+			headingText := strings.TrimSpace(heading.Text())
+			if headingText == title {
+				existInHeading = true
+				return false
+			}
+
+			return true
+		})
+
+		// If we don't, let's extract the title out of the original title string.
+		if !existInHeading {
+			index := strings.LastIndex(originalTitle, ":")
+			title = originalTitle[index+1:]
+
+			// If the title is now too short, try the first colon instead:
+			if len(strings.Fields(title)) < 3 {
+				index = strings.Index(originalTitle, ":")
+				title = originalTitle[:index]
+				// But if we have too many words before the colon there's something weird
+				// with the titles and the H tags so let's just use the original title instead
+			} else {
+				index = strings.Index(originalTitle, ":")
+				beforeColon := originalTitle[:index]
+				if len(strings.Fields(beforeColon)) > 5 {
+					title = originalTitle
+				}
+			}
+		}
+	} else if strLen(title) > 150 || strLen(title) < 15 {
+		hOne := doc.Find("h1").First()
+		if hOne != nil {
+			title = hOne.Text()
+		}
+	}
+
+	// If we now have 4 words or fewer as our title, and either no
+	// 'hierarchical' separators (\, /, > or ») were found in the original
+	// title or we decreased the number of words by more than 1 word, use
+	// the original title.
+	curTitleWordCount := len(strings.Fields(title))
+	noSeparatorWordCount := len(strings.Fields(removeSeparator(originalTitle, separators...)))
+	if curTitleWordCount <= 4 && (!titleHadHierarchicalSeparators || curTitleWordCount != noSeparatorWordCount-1) {
+		title = originalTitle
+	}
+
+	return normalizeText(title)
+}
+
+// getArticleMetadata attempts to get excerpt and byline metadata for the article.
+func getArticleMetadata(doc *goquery.Document) Metadata {
 	metadata := Metadata{}
 	mapAttribute := make(map[string]string)
 
@@ -213,7 +254,7 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 		metadata.Image = "http:" + metadata.Image
 	}
 
-	// Set final description
+	// Set final excerpt
 	if _, exist := mapAttribute["description"]; exist {
 		metadata.Excerpt = mapAttribute["description"]
 	} else if _, exist := mapAttribute["og:description"]; exist {
@@ -223,7 +264,7 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 	}
 
 	// Set final title
-	metadata.Title = r.getArticleTitle(doc)
+	metadata.Title = getArticleTitle(doc)
 	if metadata.Title == "" {
 		if _, exist := mapAttribute["og:title"]; exist {
 			metadata.Title = mapAttribute["og:title"]
@@ -232,257 +273,94 @@ func (r *readability) getArticleMetadata(doc *goquery.Document) Metadata {
 		}
 	}
 
+	// Clean up the metadata
+	metadata.Title = normalizeText(metadata.Title)
+	metadata.Excerpt = normalizeText(metadata.Excerpt)
+
 	return metadata
 }
 
-// Get the article title
-func (r *readability) getArticleTitle(doc *goquery.Document) string {
-	// Get title tag
-	title := doc.Find("title").First().Text()
-	title = normalizeText(title)
-	originalTitle := title
-
-	// Create list of separator
-	separators := []string{`|`, `-`, `\`, `/`, `>`, `»`}
-	hierarchialSeparators := []string{`\`, `/`, `>`, `»`}
-
-	// If there's a separator in the title, first remove the final part
-	titleHadHierarchicalSeparators := false
-	if idx, sep := findSeparator(title, separators...); idx != -1 {
-		titleHadHierarchicalSeparators = hasSeparator(title, hierarchialSeparators...)
-
-		index := strings.LastIndex(originalTitle, sep)
-		title = originalTitle[:index]
-
-		// If the resulting title is too short (3 words or fewer), remove
-		// the first part instead:
-		if len(strings.Fields(title)) < 3 {
-			index = strings.Index(originalTitle, sep)
-			title = originalTitle[index+1:]
-		}
-	} else if strings.Contains(title, ": ") {
-		// Check if we have an heading containing this exact string, so we
-		// could assume it's the full title.
-		existInHeading := false
-		doc.Find("h1,h2").EachWithBreak(func(_ int, heading *goquery.Selection) bool {
-			headingText := strings.TrimSpace(heading.Text())
-			if headingText == title {
-				existInHeading = true
-				return false
-			}
-
-			return true
-		})
-
-		// If we don't, let's extract the title out of the original title string.
-		if !existInHeading {
-			index := strings.LastIndex(originalTitle, ":")
-			title = originalTitle[index+1:]
-
-			// If the title is now too short, try the first colon instead:
-			if len(strings.Fields(title)) < 3 {
-				index = strings.Index(originalTitle, ":")
-				title = originalTitle[index+1:]
-				// But if we have too many words before the colon there's something weird
-				// with the titles and the H tags so let's just use the original title instead
-			} else {
-				index = strings.Index(originalTitle, ":")
-				title = originalTitle[:index]
-				if len(strings.Fields(title)) > 5 {
-					title = originalTitle
-				}
-			}
-		}
-	} else if strLen(title) > 150 || strLen(title) < 15 {
-		hOne := doc.Find("h1").First()
-		if hOne != nil {
-			title = normalizeText(hOne.Text())
-		}
-	}
-
-	// If we now have 4 words or fewer as our title, and either no
-	// 'hierarchical' separators (\, /, > or ») were found in the original
-	// title or we decreased the number of words by more than 1 word, use
-	// the original title.
-	curTitleWordCount := len(strings.Fields(title))
-	noSeparatorWordCount := len(strings.Fields(removeSeparator(originalTitle, separators...)))
-	if curTitleWordCount <= 4 && (!titleHadHierarchicalSeparators || curTitleWordCount != noSeparatorWordCount-1) {
-		title = originalTitle
-	}
-
-	return title
+// isValidByline checks whether the input string could be a byline.
+// This verifies that the input is a string, and that the length
+// is less than 100 chars.
+func isValidByline(str string) bool {
+	return strLen(str) > 0 && strLen(str) < 100
 }
 
-// Using a variety of metrics (content score, classname, element types), find the content that is
-// most likely to be the stuff a user wants to read. Then return it wrapped up in a div.
-func (r *readability) getArticleContent(doc *goquery.Document) *goquery.Selection {
-	// First, node prepping. Trash nodes that look cruddy (like ones with the
-	// class name "comment", etc), and turn divs into P tags where they have been
-	// used inappropriately (as in, where they contain no other block level elements.)
-	doc.Find("*").Each(func(i int, s *goquery.Selection) {
-		matchString := s.AttrOr("class", "") + " " + s.AttrOr("id", "")
-
-		// If byline, remove this element
-		if rel := s.AttrOr("rel", ""); rel == "author" || byline.MatchString(matchString) {
-			s.Remove()
-			return
-		}
-
-		// Remove unlikely candidates
-		if unlikelyCandidates.MatchString(matchString) &&
-			!okMaybeItsACandidate.MatchString(matchString) &&
-			!s.Is("body") && !s.Is("a") {
-			s.Remove()
-			return
-		}
-
-		if unlikelyElements.MatchString(r.getTagName(s)) {
-			s.Remove()
-			return
-		}
-
-		// Remove DIV, SECTION, and HEADER nodes without any content(e.g. text, image, video, or iframe).
-		if s.Is("div,section,header,h1,h2,h3,h4,h5,h6") && r.isElementEmpty(s) {
-			s.Remove()
-			return
-		}
-
-		// Turn all divs that don't have children block level elements into p's
-		if s.Is("div") {
-			sHTML, _ := s.Html()
-			if !divToPElements.MatchString(sHTML) {
-				s.Nodes[0].Data = "p"
-			}
-		}
-	})
-
-	// Loop through all paragraphs, and assign a score to them based on how content-y they look.
-	// Then add their score to their parent node.
-	// A score is determined by things like number of commas, class names, etc. Maybe eventually link density.
-	r.candidates = make(map[string]candidateItem)
-	doc.Find("p").Each(func(i int, s *goquery.Selection) {
-		// If this paragraph is less than 25 characters, don't even count it.
-		innerText := normalizeText(s.Text())
-		if strLen(innerText) < 25 {
-			return
-		}
-
-		// Exclude nodes with no ancestor.
-		ancestors := r.getNodeAncestors(s, 3)
-		if len(ancestors) == 0 {
-			return
-		}
-
-		// Calculate content score
-		// Add a point for the paragraph itself as a base.
-		contentScore := 1.0
-
-		// Add points for any commas within this paragraph.
-		contentScore += float64(strings.Count(innerText, ","))
-		contentScore += float64(strings.Count(innerText, "，"))
-
-		// For every 100 characters in this paragraph, add another point. Up to 3 points.
-		contentScore += math.Min(math.Floor(float64(strLen(innerText)/100)), 3)
-
-		// Initialize and score ancestors.
-		for level, ancestor := range ancestors {
-			// Node score divider:
-			// - parent:             1 (no division)
-			// - grandparent:        2
-			// - great grandparent+: ancestor level * 3
-			scoreDivider := 0
-			if level == 0 {
-				scoreDivider = 1
-			} else if level == 1 {
-				scoreDivider = 2
-			} else {
-				scoreDivider = level * 3
-			}
-
-			ancestorHash := hashStr(ancestor)
-			if _, ok := r.candidates[ancestorHash]; !ok {
-				r.candidates[ancestorHash] = r.initializeNodeScore(ancestor)
-			}
-
-			candidate := r.candidates[ancestorHash]
-			candidate.score += contentScore / float64(scoreDivider)
-			r.candidates[ancestorHash] = candidate
-		}
-	})
-
-	// After we've calculated scores, loop through all of the possible
-	// candidate nodes we found and find the one with the highest score.
-	var topCandidate *candidateItem
-	for hash, candidate := range r.candidates {
-		candidate.score = candidate.score * (1 - r.getLinkDensity(candidate.node))
-		r.candidates[hash] = candidate
-
-		if topCandidate == nil || candidate.score > topCandidate.score {
-			if topCandidate == nil {
-				topCandidate = new(candidateItem)
-			}
-
-			topCandidate.score = candidate.score
-			topCandidate.node = candidate.node
-		}
+func isElementWithoutContent(s *goquery.Selection) bool {
+	if s == nil {
+		return true
 	}
 
-	// If top candidate not found, stop
-	if topCandidate == nil {
-		return nil
-	}
-
-	r.prepArticle(topCandidate.node)
-	return topCandidate.node
-}
-
-// Check if a node is empty
-func (r *readability) isElementEmpty(s *goquery.Selection) bool {
 	html, _ := s.Html()
 	html = strings.TrimSpace(html)
 	return html == ""
 }
 
-// Get tag name from a node
-func (r *readability) getTagName(s *goquery.Selection) string {
-	if s == nil || len(s.Nodes) == 0 {
-		return ""
-	}
-	return s.Nodes[0].Data
+// hasSinglePInsideElement checks if this node has only whitespace and a single P element.
+// Returns false if the DIV node contains non-empty text nodes
+// or if it contains no P or more than 1 element.
+func hasSinglePInsideElement(s *goquery.Selection) bool {
+	// There should be exactly 1 element child which is a P
+	return s.Children().Length() == 1 && s.Children().First().Is("p")
 }
 
-func (r *readability) getNodeAncestors(node *goquery.Selection, maxDepth int) []*goquery.Selection {
+// hasChildBlockElement determines whether element has any children
+// block level elements.
+func hasChildBlockElement(s *goquery.Selection) bool {
+	html, _ := s.Html()
+	return rxDivToPElements.MatchString(html)
+}
+
+func setNodeTag(s *goquery.Selection, tag string) {
+	html, _ := s.Html()
+	newHTML := fmt.Sprintf("<%s>%s</%s>", tag, html, tag)
+	s.ReplaceWithHtml(newHTML)
+}
+
+func getNodeAncestors(node *goquery.Selection, maxDepth int) []*goquery.Selection {
 	ancestors := []*goquery.Selection{}
-	parent := *node
+	parent := node
 
 	for i := 0; i < maxDepth; i++ {
-		parent = *parent.Parent()
+		parent = parent.Parent()
 		if len(parent.Nodes) == 0 {
 			return ancestors
 		}
 
-		ancestors = append(ancestors, &parent)
+		ancestors = append(ancestors, parent)
 	}
 
 	return ancestors
 }
 
-// Check if a given node has one of its ancestor tag name matching the provided one.
-func (r *readability) hasAncestorTag(node *goquery.Selection, tag string) bool {
-	for parent := *node; len(parent.Nodes) > 0; parent = *parent.Parent() {
-		if parent.Nodes[0].Data == tag {
-			return true
+func hasAncestorTag(node *goquery.Selection, tag string, maxDepth int) (*goquery.Selection, bool) {
+	parent := node
+
+	if maxDepth < 0 {
+		maxDepth = 100
+	}
+
+	for i := 0; i < maxDepth; i++ {
+		parent = parent.Parent()
+		if len(parent.Nodes) == 0 {
+			break
+		}
+
+		if parent.Is(tag) {
+			return parent, true
 		}
 	}
 
-	return false
+	return nil, false
 }
 
-// Initialize a node and checks the className/id for special names
-// to add to its score.
-func (r *readability) initializeNodeScore(node *goquery.Selection) candidateItem {
+// initializeNodeScore initializes a node and checks the className/id
+// for special names to add to its score.
+func initializeNodeScore(node *goquery.Selection) candidateItem {
 	contentScore := 0.0
-	switch r.getTagName(node) {
+	tagName := goquery.NodeName(node)
+	switch strings.ToLower(tagName) {
 	case "article":
 		contentScore += 10
 	case "section":
@@ -497,30 +375,30 @@ func (r *readability) initializeNodeScore(node *goquery.Selection) candidateItem
 		contentScore -= 5
 	}
 
-	contentScore += r.getClassWeight(node)
+	contentScore += getClassWeight(node)
 	return candidateItem{contentScore, node}
 }
 
-// Get an elements class/id weight. Uses regular expressions to tell if this
-// element looks good or bad.
-func (r *readability) getClassWeight(node *goquery.Selection) float64 {
+// getClassWeight gets an elements class/id weight.
+// Uses regular expressions to tell if this element looks good or bad.
+func getClassWeight(node *goquery.Selection) float64 {
 	weight := 0.0
 	if str, b := node.Attr("class"); b {
-		if negative.MatchString(str) {
+		if rxNegative.MatchString(str) {
 			weight -= 25
 		}
 
-		if positive.MatchString(str) {
+		if rxPositive.MatchString(str) {
 			weight += 25
 		}
 	}
 
 	if str, b := node.Attr("id"); b {
-		if negative.MatchString(str) {
+		if rxNegative.MatchString(str) {
 			weight -= 25
 		}
 
-		if positive.MatchString(str) {
+		if rxPositive.MatchString(str) {
 			weight += 25
 		}
 	}
@@ -528,13 +406,9 @@ func (r *readability) getClassWeight(node *goquery.Selection) float64 {
 	return weight
 }
 
-// Get the density of links as a percentage of the content
+// getLinkDensity gets the density of links as a percentage of the content
 // This is the amount of text that is inside a link divided by the total text in the node.
-func (r *readability) getLinkDensity(node *goquery.Selection) float64 {
-	if node == nil {
-		return 0
-	}
-
+func getLinkDensity(node *goquery.Selection) float64 {
 	textLength := strLen(normalizeText(node.Text()))
 	if textLength == 0 {
 		return 0
@@ -548,68 +422,11 @@ func (r *readability) getLinkDensity(node *goquery.Selection) float64 {
 	return float64(linkLength) / float64(textLength)
 }
 
-// Prepare the article node for display. Clean out any inline styles,
-// iframes, forms, strip extraneous <p> tags, etc.
-func (r *readability) prepArticle(content *goquery.Selection) {
-	if content == nil {
-		return
-	}
-
-	// Remove styling attribute
-	r.cleanStyle(content)
-
-	// Clean out junk from the article content
-	r.cleanConditionally(content, "form")
-	r.cleanConditionally(content, "fieldset")
-	r.clean(content, "h1")
-	r.clean(content, "object")
-	r.clean(content, "embed")
-	r.clean(content, "footer")
-	r.clean(content, "link")
-
-	// If there is only one h2 or h3 and its text content substantially equals article title,
-	// they are probably using it as a header and not a subheader,
-	// so remove it since we already extract the title separately.
-	if content.Find("h2").Length() == 1 {
-		r.clean(content, "h2")
-	}
-
-	if content.Find("h3").Length() == 1 {
-		r.clean(content, "h3")
-	}
-
-	r.clean(content, "iframe")
-	r.clean(content, "input")
-	r.clean(content, "textarea")
-	r.clean(content, "select")
-	r.clean(content, "button")
-	r.cleanHeaders(content)
-
-	// Do these last as the previous stuff may have removed junk
-	// that will affect these
-	r.cleanConditionally(content, "table")
-	r.cleanConditionally(content, "ul")
-	r.cleanConditionally(content, "div")
-
-	// Fix all relative URL
-	r.fixRelativeURIs(content)
-
-	// Last time, clean all empty tags and remove class name
-	content.Find("*").Each(func(_ int, s *goquery.Selection) {
-		if r.isElementEmpty(s) {
-			s.Remove()
-		}
-
-		s.RemoveAttr("class")
-		s.RemoveAttr("id")
-	})
-}
-
 // Remove the style attribute on every e and under.
-func (r *readability) cleanStyle(s *goquery.Selection) {
+func cleanStyle(s *goquery.Selection) {
 	s.Find("*").Each(func(i int, s1 *goquery.Selection) {
-		tagName := s1.Nodes[0].Data
-		if tagName == "svg" {
+		tagName := goquery.NodeName(s1)
+		if strings.ToLower(tagName) == "svg" {
 			return
 		}
 
@@ -638,48 +455,111 @@ func (r *readability) cleanStyle(s *goquery.Selection) {
 	})
 }
 
-// Clean a node of all elements of type "tag".
-// (Unless it's a youtube/vimeo video. People love movies.)
-func (r *readability) clean(s *goquery.Selection, tag string) {
-	if s == nil {
-		return
-	}
-
-	isEmbed := false
-	if tag == "object" || tag == "embed" || tag == "iframe" {
-		isEmbed = true
-	}
-
-	s.Find(tag).Each(func(i int, target *goquery.Selection) {
-		attributeValues := ""
-		for _, attribute := range target.Nodes[0].Attr {
-			attributeValues += " " + attribute.Val
+// Return an object indicating how many rows and columns this table has.
+func getTableRowAndColumnCount(table *goquery.Selection) (int, int) {
+	rows := 0
+	columns := 0
+	table.Find("tr").Each(func(_ int, tr *goquery.Selection) {
+		// Look for rows
+		strRowSpan, _ := tr.Attr("rowspan")
+		rowSpan, err := strconv.Atoi(strRowSpan)
+		if err != nil {
+			rowSpan = 1
 		}
+		rows += rowSpan
 
-		if isEmbed && videos.MatchString(attributeValues) {
+		// Now look for columns
+		columnInThisRow := 0
+		tr.Find("td").Each(func(_ int, td *goquery.Selection) {
+			strColSpan, _ := tr.Attr("colspan")
+			colSpan, err := strconv.Atoi(strColSpan)
+			if err != nil {
+				colSpan = 1
+			}
+			columnInThisRow += colSpan
+		})
+
+		if columnInThisRow > columns {
+			columns = columnInThisRow
+		}
+	})
+
+	return rows, columns
+}
+
+// Look for 'data' (as opposed to 'layout') tables
+func markDataTables(s *goquery.Selection) {
+	s.Find("table").Each(func(_ int, table *goquery.Selection) {
+		role, _ := table.Attr("role")
+		if role == "presentation" {
 			return
 		}
 
-		if isEmbed && videos.MatchString(target.Text()) {
+		datatable, _ := table.Attr("datatable")
+		if datatable == "0" {
 			return
 		}
 
-		target.Remove()
+		_, summaryExist := table.Attr("summary")
+		if summaryExist {
+			table.SetAttr(dataTableAttr, "1")
+			return
+		}
+
+		caption := table.Find("caption").First()
+		if len(caption.Nodes) > 0 && caption.Children().Length() > 0 {
+			table.SetAttr(dataTableAttr, "1")
+			return
+		}
+
+		// If the table has a descendant with any of these tags, consider a data table:
+		dataTableDescendants := []string{"col", "colgroup", "tfoot", "thead", "th"}
+		for _, tag := range dataTableDescendants {
+			if table.Find(tag).Length() > 0 {
+				table.SetAttr(dataTableAttr, "1")
+				return
+			}
+		}
+
+		// Nested tables indicate a layout table:
+		if table.Find("table").Length() > 0 {
+			return
+		}
+
+		nRow, nColumn := getTableRowAndColumnCount(table)
+		if nRow >= 10 || nColumn > 4 {
+			table.SetAttr(dataTableAttr, "1")
+			return
+		}
+
+		// Now just go by size entirely:
+		if nRow*nColumn > 10 {
+			table.SetAttr(dataTableAttr, "1")
+			return
+		}
 	})
 }
 
 // Clean an element of all tags of type "tag" if they look fishy.
 // "Fishy" is an algorithm based on content length, classnames, link density, number of images & embeds, etc.
-func (r *readability) cleanConditionally(e *goquery.Selection, tag string) {
-	if e == nil {
-		return
-	}
-
+func cleanConditionally(e *goquery.Selection, tag string) {
 	isList := tag == "ul" || tag == "ol"
 
 	e.Find(tag).Each(func(i int, node *goquery.Selection) {
+		// First check if we're in a data table, in which case don't remove it
+		if ancestor, hasTag := hasAncestorTag(node, "table", -1); hasTag {
+			if attr, _ := ancestor.Attr(dataTableAttr); attr == "1" {
+				return
+			}
+		}
+
+		// If it is table, remove data table marker
+		if tag == "table" {
+			node.RemoveAttr(dataTableAttr)
+		}
+
 		contentScore := 0.0
-		weight := r.getClassWeight(node)
+		weight := getClassWeight(node)
 		if weight+contentScore < 0 {
 			node.Remove()
 			return
@@ -699,17 +579,19 @@ func (r *readability) cleanConditionally(e *goquery.Selection, tag string) {
 
 			embedCount := 0
 			node.Find("embed").Each(func(i int, embed *goquery.Selection) {
-				if !videos.MatchString(embed.AttrOr("src", "")) {
+				if !rxVideos.MatchString(embed.AttrOr("src", "")) {
 					embedCount++
 				}
 			})
 
-			linkDensity := r.getLinkDensity(node)
-			contentLength := strLen(normalizeText(node.Text()))
+			contentLength := strLen(nodeText)
+			linkDensity := getLinkDensity(node)
+			_, hasFigureAncestor := hasAncestorTag(node, "figure", 3)
+
 			haveToRemove := (!isList && li > p) ||
-				(img > 1 && float64(p)/float64(img) < 0.5 && !r.hasAncestorTag(node, "figure")) ||
+				(img > 1 && float64(p)/float64(img) < 0.5 && !hasFigureAncestor) ||
 				(float64(input) > math.Floor(float64(p)/3)) ||
-				(!isList && contentLength < 25 && (img == 0 || img > 2) && !r.hasAncestorTag(node, "figure")) ||
+				(!isList && contentLength < 25 && (img == 0 || img > 2) && !hasFigureAncestor) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
 				((embedCount == 1 && contentLength < 75) || embedCount > 1)
@@ -721,75 +603,456 @@ func (r *readability) cleanConditionally(e *goquery.Selection, tag string) {
 	})
 }
 
+// Clean a node of all elements of type "tag".
+// (Unless it's a youtube/vimeo video. People love movies.)
+func clean(s *goquery.Selection, tag string) {
+	isEmbed := tag == "object" || tag == "embed" || tag == "iframe"
+
+	s.Find(tag).Each(func(i int, target *goquery.Selection) {
+		attributeValues := ""
+		for _, attribute := range target.Nodes[0].Attr {
+			attributeValues += " " + attribute.Val
+		}
+
+		if isEmbed && rxVideos.MatchString(attributeValues) {
+			return
+		}
+
+		if isEmbed && rxVideos.MatchString(target.Text()) {
+			return
+		}
+
+		target.Remove()
+	})
+}
+
 // Clean out spurious headers from an Element. Checks things like classnames and link density.
-func (r *readability) cleanHeaders(s *goquery.Selection) {
+func cleanHeaders(s *goquery.Selection) {
 	s.Find("h1,h2,h3").Each(func(_ int, s1 *goquery.Selection) {
-		if r.getClassWeight(s1) < 0 {
+		if getClassWeight(s1) < 0 {
 			s1.Remove()
 		}
 	})
 }
 
-// Converts each <a> and <img> uri in the given element to an absolute URI,
-// ignoring #ref URIs.
-func (r *readability) fixRelativeURIs(node *goquery.Selection) {
-	if node == nil {
+// Prepare the article node for display. Clean out any inline styles,
+// iframes, forms, strip extraneous <p> tags, etc.
+func prepArticle(articleContent *goquery.Selection, articleTitle string) {
+	if articleContent == nil {
 		return
 	}
 
-	node.Find("img").Each(func(i int, img *goquery.Selection) {
-		src := img.AttrOr("src", "")
-		if file, ok := img.Attr("file"); ok {
-			src = file
-			img.SetAttr("src", file)
-			img.RemoveAttr("file")
-		}
+	// Check for data tables before we continue, to avoid removing items in
+	// those tables, which will often be isolated even though they're
+	// visually linked to other content-ful elements (text, images, etc.).
+	markDataTables(articleContent)
 
-		if src == "" {
-			img.Remove()
-			return
-		}
+	// Remove style attribute
+	cleanStyle(articleContent)
 
-		if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
-			newSrc := nurl.URL(*r.url)
-			if strings.HasPrefix(src, "/") {
-				newSrc.Path = src
-			} else {
-				newSrc.Path = pt.Join(newSrc.Path, src)
-			}
-			img.SetAttr("src", newSrc.String())
+	// Clean out junk from the article content
+	cleanConditionally(articleContent, "form")
+	cleanConditionally(articleContent, "fieldset")
+	clean(articleContent, "h1")
+	clean(articleContent, "object")
+	clean(articleContent, "embed")
+	clean(articleContent, "footer")
+	clean(articleContent, "link")
+
+	// Clean out elements have "share" in their id/class combinations from final top candidates,
+	// which means we don't remove the top candidates even they have "share".
+	articleContent.Find("*").Each(func(_ int, s *goquery.Selection) {
+		id, _ := s.Attr("id")
+		class, _ := s.Attr("class")
+		matchString := class + " " + id
+		if strings.Contains(matchString, "share") {
+			s.Remove()
 		}
 	})
 
-	node.Find("a").Each(func(_ int, link *goquery.Selection) {
-		if href, ok := link.Attr("href"); ok {
-			if !strings.HasPrefix(href, "http://") && !strings.HasPrefix(href, "https://") {
-				newHref := nurl.URL(*r.url)
-				if strings.HasPrefix(href, "/") {
-					newHref.Path = href
-				} else if !strings.HasPrefix(href, "#") {
-					newHref.Path = pt.Join(newHref.Path, href)
-				}
-				link.SetAttr("href", newHref.String())
+	// If there is only one h2 and its text content substantially equals article title,
+	// they are probably using it as a header and not a subheader,
+	// so remove it since we already extract the title separately.
+	h2s := articleContent.Find("h2")
+	if h2s.Length() == 1 {
+		h2 := h2s.First()
+		h2Text := normalizeText(h2.Text())
+		lengthSimilarRate := float64(strLen(h2Text)-strLen(articleTitle)) /
+			float64(strLen(articleTitle))
+
+		if math.Abs(lengthSimilarRate) < 0.5 {
+			titlesMatch := false
+			if lengthSimilarRate > 0 {
+				titlesMatch = strings.Contains(h2Text, articleTitle)
+			} else {
+				titlesMatch = strings.Contains(articleTitle, h2Text)
 			}
+
+			if titlesMatch {
+				h2.Remove()
+			}
+		}
+	}
+
+	clean(articleContent, "iframe")
+	clean(articleContent, "input")
+	clean(articleContent, "textarea")
+	clean(articleContent, "select")
+	clean(articleContent, "button")
+	cleanHeaders(articleContent)
+
+	// Do these last as the previous stuff may have removed junk
+	// that will affect these
+	cleanConditionally(articleContent, "table")
+	cleanConditionally(articleContent, "ul")
+	cleanConditionally(articleContent, "div")
+
+	// Remove extra paragraphs
+	// At this point, nasty iframes have been removed, only remain embedded video ones.
+	articleContent.Find("p").Each(func(_ int, p *goquery.Selection) {
+		imgCount := p.Find("img").Length()
+		embedCount := p.Find("embed").Length()
+		objectCount := p.Find("object").Length()
+		iframeCount := p.Find("iframe").Length()
+		totalCount := imgCount + embedCount + objectCount + iframeCount
+
+		pText := normalizeText(p.Text())
+		if totalCount == 0 && strLen(pText) == 0 {
+			p.Remove()
+		}
+	})
+
+	articleContent.Find("br").Each(func(_ int, br *goquery.Selection) {
+		if br.Next().Is("p") {
+			br.Remove()
 		}
 	})
 }
 
+// grabArticle fetch the articles using a variety of metrics (content score, classname, element types),
+// find the content that is most likely to be the stuff a user wants to read.
+// Then return it wrapped up in a div.
+func grabArticle(doc *goquery.Document, articleTitle string) (*goquery.Selection, string) {
+	// Create initial variable
+	author := ""
+	elementsToScore := []*goquery.Selection{}
+
+	// First, node prepping. Trash nodes that look cruddy (like ones with the
+	// class name "comment", etc), and turn divs into P tags where they have been
+	// used inappropriately (as in, where they contain no other block level elements.)
+	doc.Find("*").Each(func(i int, s *goquery.Selection) {
+		matchString := s.AttrOr("class", "") + " " + s.AttrOr("id", "")
+
+		// If byline, remove this element
+		if rel := s.AttrOr("rel", ""); rel == "author" || rxByline.MatchString(matchString) {
+			text := s.Text()
+			text = strings.TrimSpace(text)
+			if isValidByline(text) {
+				author = text
+				s.Remove()
+				return
+			}
+		}
+
+		// Remove unlikely candidates
+		if rxUnlikelyCandidates.MatchString(matchString) &&
+			!rxOkMaybeItsACandidate.MatchString(matchString) &&
+			!s.Is("body") && !s.Is("a") {
+			s.Remove()
+			return
+		}
+
+		if rxUnlikelyElements.MatchString(goquery.NodeName(s)) {
+			s.Remove()
+			return
+		}
+
+		// Remove DIV, SECTION, and HEADER nodes without any content(e.g. text, image, video, or iframe).
+		if s.Is("div,section,header,h1,h2,h3,h4,h5,h6") && isElementWithoutContent(s) {
+			s.Remove()
+			return
+		}
+
+		if s.Is("section,h2,h3,h4,h5,h6,p,td,pre") {
+			elementsToScore = append(elementsToScore, s)
+		}
+
+		// Turn all divs that don't have children block level elements into p's
+		if s.Is("div") {
+			// Sites like http://mobile.slate.com encloses each paragraph with a DIV
+			// element. DIVs with only a P element inside and no text content can be
+			// safely converted into plain P elements to avoid confusing the scoring
+			// algorithm with DIVs with are, in practice, paragraphs.
+			if hasSinglePInsideElement(s) {
+				newNode := s.Children().First()
+				s.ReplaceWithSelection(newNode)
+				elementsToScore = append(elementsToScore, s)
+			} else if !hasChildBlockElement(s) {
+				setNodeTag(s, "p")
+				elementsToScore = append(elementsToScore, s)
+			}
+		}
+	})
+
+	// Loop through all paragraphs, and assign a score to them based on how content-y they look.
+	// Then add their score to their parent node.
+	// A score is determined by things like number of commas, class names, etc. Maybe eventually link density.
+	candidates := make(map[string]candidateItem)
+	for _, s := range elementsToScore {
+		// If this paragraph is less than 25 characters, don't even count it.
+		innerText := normalizeText(s.Text())
+		if strLen(innerText) < 25 {
+			continue
+		}
+
+		// Exclude nodes with no ancestor.
+		ancestors := getNodeAncestors(s, 3)
+		if len(ancestors) == 0 {
+			continue
+		}
+
+		// Calculate content score
+		// Add a point for the paragraph itself as a base.
+		contentScore := 1.0
+
+		// Add points for any commas within this paragraph.
+		contentScore += float64(strings.Count(innerText, ","))
+		contentScore += float64(strings.Count(innerText, "，"))
+
+		// For every 100 characters in this paragraph, add another point. Up to 3 points.
+		contentScore += math.Min(math.Floor(float64(strLen(innerText)/100)), 3)
+
+		// Initialize and score ancestors.
+		for level, ancestor := range ancestors {
+			// Node score divider:
+			// - parent:             1 (no division)
+			// - grandparent:        2
+			// - great grandparent+: ancestor level * 3
+			scoreDivider := 0
+			if level == 0 {
+				scoreDivider = 1
+			} else if level == 1 {
+				scoreDivider = 2
+			} else {
+				scoreDivider = level * 3
+			}
+
+			ancestorHash := hashNode(ancestor)
+			if _, ok := candidates[ancestorHash]; !ok {
+				candidates[ancestorHash] = initializeNodeScore(ancestor)
+			}
+
+			candidate := candidates[ancestorHash]
+			candidate.score += contentScore / float64(scoreDivider)
+			candidates[ancestorHash] = candidate
+		}
+	}
+
+	// Scale the final candidates score based on link density. Good content
+	// should have a relatively small link density (5% or less) and be mostly
+	// unaffected by this operation.
+	topCandidate := candidateItem{}
+	for hash, candidate := range candidates {
+		candidate.score = candidate.score * (1 - getLinkDensity(candidate.node))
+		candidates[hash] = candidate
+
+		if topCandidate.node == nil || candidate.score > topCandidate.score {
+			topCandidate = candidate
+		}
+	}
+
+	// If we still have no top candidate, use the body as a last resort.
+	if topCandidate.node == nil {
+		body := doc.Find("body").First()
+
+		bodyHTML, _ := body.Html()
+		newHTML := fmt.Sprintf(`<div id="xxx-readability-body">%s<div>`, bodyHTML)
+		body.AppendHtml(newHTML)
+
+		tempReadabilityBody := body.Find("div#xxx-readability-body").First()
+		tempReadabilityBody.RemoveAttr("id")
+
+		tempHash := hashNode(tempReadabilityBody)
+		if _, ok := candidates[tempHash]; !ok {
+			candidates[tempHash] = initializeNodeScore(tempReadabilityBody)
+		}
+
+		topCandidate = candidates[tempHash]
+	}
+
+	// Create new document to save the final article content.
+	reader := strings.NewReader(`<div id="readability-content"></div>`)
+	newDoc, _ := goquery.NewDocumentFromReader(reader)
+	articleContent := newDoc.Find("div#readability-content").First()
+
+	// Now that we have the top candidate, look through its siblings for content
+	// that might also be related. Things like preambles, content split by ads
+	// that we removed, etc.
+	topCandidateClass, _ := topCandidate.node.Attr("class")
+	siblingScoreThreshold := math.Max(10.0, topCandidate.score*0.2)
+	topCandidate.node.Parent().Children().Each(func(_ int, sibling *goquery.Selection) {
+		appendSibling := false
+
+		if sibling.IsSelection(topCandidate.node) {
+			appendSibling = true
+		} else {
+			contentBonus := 0.0
+			siblingClass, _ := sibling.Attr("class")
+			if siblingClass == topCandidateClass && topCandidateClass != "" {
+				contentBonus += topCandidate.score * 0.2
+			}
+
+			siblingHash := hashNode(sibling)
+			if item, ok := candidates[siblingHash]; ok && item.score > siblingScoreThreshold {
+				appendSibling = true
+			} else if sibling.Is("p") {
+				linkDensity := getLinkDensity(sibling)
+				nodeContent := normalizeText(sibling.Text())
+				nodeLength := strLen(nodeContent)
+
+				if nodeLength > 80 && linkDensity < 0.25 {
+					appendSibling = true
+				} else if nodeLength < 80 && nodeLength > 0 &&
+					linkDensity == 0 && rxPIsSentence.MatchString(nodeContent) {
+					appendSibling = true
+				}
+			}
+		}
+
+		if appendSibling {
+			articleContent.AppendSelection(sibling)
+		}
+	})
+
+	// So we have all of the content that we need.
+	// Now we clean it up for presentation.
+	prepArticle(articleContent, articleTitle)
+
+	return articleContent, author
+}
+
+// Convert relative uri to absolute
+func toAbsoluteURI(uri string, base *nurl.URL) string {
+	if uri == "" || base == nil {
+		return ""
+	}
+
+	if uri[0:1] == "#" {
+		return uri
+	}
+
+	newURI := nurl.URL(*base)
+	newURI.Path = uri
+
+	return newURI.String()
+}
+
+// Converts each <a> and <img> uri in the given element to an absolute URI,
+// ignoring #ref URIs.
+func fixRelativeURIs(articleContent *goquery.Selection, base *nurl.URL) {
+	articleContent.Find("a").Each(func(_ int, a *goquery.Selection) {
+		if href, exist := a.Attr("href"); exist {
+			// Replace links with javascript: URIs with text content, since
+			// they won't work after scripts have been removed from the page.
+			if strings.HasPrefix(href, "javascript:") {
+				text := a.Text()
+				a.ReplaceWithHtml(text)
+			} else {
+				a.SetAttr("href", toAbsoluteURI(href, base))
+			}
+		}
+	})
+
+	articleContent.Find("img").Each(func(_ int, img *goquery.Selection) {
+		if src, exist := img.Attr("src"); exist {
+			img.SetAttr("src", toAbsoluteURI(src, base))
+		}
+	})
+}
+
+func postProcessContent(articleContent *goquery.Selection, uri *nurl.URL) {
+	// Readability cannot open relative uris so we convert them to absolute uris.
+	fixRelativeURIs(articleContent, uri)
+
+	// Last time, clean all empty tags and remove id and class name
+	articleContent.Find("*").Each(func(_ int, s *goquery.Selection) {
+		html, _ := s.Html()
+		html = strings.TrimSpace(html)
+		if html == "" {
+			s.Remove()
+		}
+
+		s.RemoveAttr("class")
+		s.RemoveAttr("id")
+	})
+}
+
+// getHTMLContent fetch and cleans the raw html from article
+func getHTMLContent(articleContent *goquery.Selection) string {
+	html, err := articleContent.Html()
+	if err != nil {
+		return ""
+	}
+
+	html = ghtml.UnescapeString(html)
+	html = rxComments.ReplaceAllString(html, "")
+	html = rxKillBreaks.ReplaceAllString(html, "<br />")
+	html = rxSpaces.ReplaceAllString(html, " ")
+	return html
+}
+
+// getTextContent fetch and cleans the text from article
+func getTextContent(articleContent *goquery.Selection) string {
+	var buf bytes.Buffer
+
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			nodeText := normalizeText(n.Data)
+			if nodeText != "" {
+				buf.WriteString(nodeText)
+			}
+		} else if n.Parent != nil && n.Parent.DataAtom != atom.P {
+			buf.WriteString("|X|")
+		}
+
+		if n.FirstChild != nil {
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				f(c)
+			}
+		}
+	}
+
+	for _, n := range articleContent.Nodes {
+		f(n)
+	}
+
+	finalContent := ""
+	paragraphs := strings.Split(buf.String(), "|X|")
+	for _, paragraph := range paragraphs {
+		if paragraph != "" {
+			finalContent += paragraph + "\n\n"
+		}
+	}
+
+	finalContent = strings.TrimSpace(finalContent)
+	return finalContent
+}
+
 // Estimate read time based on the language number of character in contents.
 // Using data from http://iovs.arvojournals.org/article.aspx?articleid=2166061
-func (r *readability) estimateReadTime(content *goquery.Selection) (int, int) {
-	if content == nil {
+func estimateReadTime(articleContent *goquery.Selection) (int, int) {
+	if articleContent == nil {
 		return 0, 0
 	}
 
 	// Check the language
-	contentText := normalizeText(content.Text())
+	contentText := normalizeText(articleContent.Text())
 	lang := wl.LangToString(wl.DetectLang(contentText))
 
 	// Get number of words and images
 	nChar := strLen(contentText)
-	nImg := content.Find("img").Length()
+	nImg := articleContent.Find("img").Length()
 	if nChar == 0 && nImg == 0 {
 		return 0, 0
 	}
@@ -859,52 +1122,60 @@ func (r *readability) estimateReadTime(content *goquery.Selection) (int, int) {
 	return int(minReadTime), int(maxReadTime)
 }
 
-func (r *readability) getHTMLContent(content *goquery.Selection) string {
-	html, err := content.Html()
+// Parse an URL to readability format
+func Parse(url string, timeout time.Duration) (Article, error) {
+	// Make sure url is valid
+	parsedURL, err := nurl.Parse(url)
 	if err != nil {
-		return ""
+		return Article{}, err
 	}
 
-	html = ghtml.UnescapeString(html)
-	html = comments.ReplaceAllString(html, "")
-	html = killBreaks.ReplaceAllString(html, "<br />")
-	html = spaces.ReplaceAllString(html, " ")
-	return html
-}
-
-func (r *readability) getTextContent(content *goquery.Selection) string {
-	var buf bytes.Buffer
-
-	var f func(*html.Node)
-	f = func(n *html.Node) {
-		if n.Type == html.TextNode {
-			nodeText := normalizeText(n.Data)
-			if nodeText != "" {
-				buf.WriteString(nodeText)
-			}
-		} else if n.Parent != nil && n.Parent.DataAtom != atom.P {
-			buf.WriteString("|X|")
-		}
-
-		if n.FirstChild != nil {
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				f(c)
-			}
-		}
+	// Fetch page
+	doc, err := fetchURL(parsedURL, timeout)
+	if err != nil {
+		return Article{}, err
 	}
 
-	for _, n := range content.Nodes {
-		f(n)
+	// Prepare document
+	removeScripts(doc)
+	prepDocument(doc)
+
+	// Get metadata and article
+	metadata := getArticleMetadata(doc)
+	articleContent, author := grabArticle(doc, metadata.Title)
+	if articleContent == nil {
+		return Article{}, fmt.Errorf("No article body detected")
 	}
 
-	finalContent := ""
-	paragraphs := strings.Split(buf.String(), "|X|")
-	for _, paragraph := range paragraphs {
-		if paragraph != "" {
-			finalContent += paragraph + "\n\n"
-		}
+	// Post process content
+	postProcessContent(articleContent, parsedURL)
+
+	// Estimate read time
+	minTime, maxTime := estimateReadTime(articleContent)
+	metadata.MinReadTime = minTime
+	metadata.MaxReadTime = maxTime
+
+	// Update author data in metadata
+	if author != "" {
+		metadata.Author = author
 	}
 
-	finalContent = strings.TrimSpace(finalContent)
-	return finalContent
+	// If we haven't found an excerpt in the article's metadata, use the first paragraph
+	if metadata.Excerpt == "" {
+		p := articleContent.Find("p").First().Text()
+		metadata.Excerpt = normalizeText(p)
+	}
+
+	// Get text and HTML from content
+	textContent := getTextContent(articleContent)
+	htmlContent := getHTMLContent(articleContent)
+
+	article := Article{
+		URL:        parsedURL.String(),
+		Meta:       metadata,
+		Content:    textContent,
+		RawContent: htmlContent,
+	}
+
+	return article, nil
 }

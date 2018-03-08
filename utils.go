@@ -3,12 +3,26 @@ package readability
 import (
 	"crypto/md5"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
+	"os"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
-func hashStr(node *goquery.Selection) string {
+func createDocFromFile(path string) (*goquery.Document, error) {
+	// Open file
+	src, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+
+	// Create document
+	return goquery.NewDocumentFromReader(src)
+}
+
+func hashNode(node *goquery.Selection) string {
 	if node == nil {
 		return ""
 	}
