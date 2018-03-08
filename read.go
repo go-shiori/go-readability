@@ -941,7 +941,8 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 		return uri
 	}
 
-	if tempURI, _ := nurl.Parse(uri); tempURI.Scheme != "" {
+	tempURI, err := nurl.ParseRequestURI(uri)
+	if err != nil && tempURI.Scheme != "" {
 		return uri
 	}
 
@@ -1129,7 +1130,7 @@ func estimateReadTime(articleContent *goquery.Selection) (int, int) {
 // Parse an URL to readability format
 func Parse(url string, timeout time.Duration) (Article, error) {
 	// Make sure url is valid
-	parsedURL, err := nurl.Parse(url)
+	parsedURL, err := nurl.ParseRequestURI(url)
 	if err != nil {
 		return Article{}, err
 	}
