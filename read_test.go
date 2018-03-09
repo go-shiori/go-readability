@@ -1,6 +1,7 @@
 package readability
 
 import (
+	nurl "net/url"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +171,25 @@ func Test_hasSinglePInsideElement(t *testing.T) {
 		result := hasSinglePInsideElement(doc.Find("div").First())
 		if result != want {
 			t.Errorf("%s\nWant: %t got: %t", test, want, result)
+		}
+	}
+}
+
+func Test_toAbsoluteURI(t *testing.T) {
+	base, _ := nurl.ParseRequestURI("http://localhost:8080")
+	tests := map[string]string{
+		"/test/123":              "http://localhost:8080/test/123",
+		"test/123":               "http://localhost:8080/test/123",
+		"https://www.google.com": "https://www.google.com",
+		"ftp://ftp.server.com":   "ftp://ftp.server.com",
+		"www.google.com":         "http://localhost:8080/www.google.com",
+		"http//www.google.com":   "http://localhost:8080/http//www.google.com",
+	}
+
+	for test, want := range tests {
+		result := toAbsoluteURI(test, base)
+		if result != want {
+			t.Errorf("%s\nWant: %s got: %s", test, want, result)
 		}
 	}
 }
