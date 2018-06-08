@@ -21,7 +21,8 @@ func BenchmarkReadability(b *testing.B) {
 	}
 
 	for _, url := range urls {
-		Parse(url, 5*time.Second)
+		parsedURL, _ := nurl.Parse(url)
+		FromURL(parsedURL, 5*time.Second)
 	}
 }
 
