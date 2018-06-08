@@ -1,6 +1,8 @@
 # Go-Readability
 
 [![GoDoc](https://godoc.org/github.com/RadhiFadlillah/go-readability?status.png)](https://godoc.org/github.com/RadhiFadlillah/go-readability)
+[![Travis CI](https://travis-ci.org/RadhiFadlillah/go-readability.svg?branch=master)](https://travis-ci.org/RadhiFadlillah/go-readability)
+[![Go Report Card](https://goreportcard.com/badge/github.com/radhifadlillah/go-readability)](https://goreportcard.com/report/github.com/radhifadlillah/go-readability)
 
 Go-Readability is a Go package that cleans a HTML page from clutter like buttons, ads and background images, and changes the page's text size, contrast and layout for better readability.
 
@@ -20,18 +22,24 @@ package main
 
 import (
 	"fmt"
-	"github.com/RadhiFadlillah/go-readability"
+	nurl "net/url"
 	"time"
+
+	"github.com/RadhiFadlillah/go-readability"
 )
 
 func main() {
+	// Create URL
 	url := "https://www.nytimes.com/2018/01/21/technology/inside-amazon-go-a-store-of-the-future.html"
+	parsedURL, _ := nurl.Parse(url)
 
-	article, err := readability.Parse(url, 5*time.Second)
+	// Fetch readable content
+	article, err := readability.FromURL(parsedURL, 5*time.Second)
 	if err != nil {
 		panic(err)
 	}
 
+	// Show results
 	fmt.Println(article.Meta.Title)
 	fmt.Println(article.Meta.Excerpt)
 	fmt.Println(article.Meta.Author)
