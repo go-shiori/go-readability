@@ -1006,7 +1006,7 @@ func getTextContent(articleContent *goquery.Selection) string {
 		if n.Type == html.TextNode {
 			nodeText := normalizeText(n.Data)
 			if nodeText != "" {
-				buf.WriteString(nodeText)
+				buf.WriteString(nodeText + " ")
 			}
 		} else if n.Parent != nil && n.Parent.DataAtom != atom.P {
 			buf.WriteString("|X|")
