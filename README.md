@@ -25,12 +25,12 @@ import (
 	nurl "net/url"
 	"time"
 
-	"github.com/RadhiFadlillah/go-readability"
+	"github.com/go-shiori/go-readability"
 )
 
 func main() {
 	// Create URL
-	url := "https://www.nytimes.com/2018/01/21/technology/inside-amazon-go-a-store-of-the-future.html"
+	url := "https://tools.ietf.org/html/draft-dejong-remotestorage-04"
 	parsedURL, _ := nurl.Parse(url)
 
 	// Fetch readable content
