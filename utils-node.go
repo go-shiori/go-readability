@@ -229,18 +229,21 @@ func nextElementSibling(node *html.Node) *html.Node {
 // existing node in the document, appendChild() moves it from its
 // current position to the new position.
 func appendChild(node *html.Node, child *html.Node) {
-	temp := *child
-	temp.Parent = nil
-	temp.PrevSibling = nil
-	temp.NextSibling = nil
-	node.AppendChild(&temp)
 	if child.Parent != nil {
+		temp := cloneNode(child)
+		node.AppendChild(temp)
 		child.Parent.RemoveChild(child)
+	} else {
+		node.AppendChild(child)
 	}
 }
 
-// replaceNode replaces an OldNode wit a NewNode.
+// replaceNode replaces an OldNode with a NewNode.
 func replaceNode(oldNode *html.Node, newNode *html.Node) {
+	if oldNode.Parent == nil {
+		return
+	}
+
 	newNode.Parent = nil
 	newNode.PrevSibling = nil
 	newNode.NextSibling = nil
@@ -256,4 +259,23 @@ func includeNode(nodeList []*html.Node, node *html.Node) bool {
 		}
 	}
 	return false
+}
+
+// cloneNode returns a deep clone of the node and its children.
+// However, it will be detached from the original's parents
+// and siblings.
+func cloneNode(src *html.Node) *html.Node {
+	clone := &html.Node{
+		Type:     src.Type,
+		DataAtom: src.DataAtom,
+		Data:     src.Data,
+		Attr:     make([]html.Attribute, len(src.Attr)),
+	}
+
+	copy(clone.Attr, src.Attr)
+	for child := src.FirstChild; child != nil; child = child.NextSibling {
+		clone.AppendChild(cloneNode(child))
+	}
+
+	return clone
 }

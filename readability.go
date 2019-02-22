@@ -564,7 +564,9 @@ func (w *Worker) initializeNode(node *html.Node) {
 // removeAndGetNext remove node and returns its next node.
 func (w *Worker) removeAndGetNext(node *html.Node) *html.Node {
 	nextNode := w.getNextNode(node, true)
-	node.Parent.RemoveChild(node)
+	if node.Parent != nil {
+		node.Parent.RemoveChild(node)
+	}
 	return nextNode
 }
 
@@ -650,7 +652,7 @@ func (w *Worker) grabArticle() *html.Node {
 		return nil
 	}
 
-	pageCache := *page
+	pageCache := cloneNode(page)
 	renderToFile(doc, "step-1.html")
 	for {
 		// First, node prepping. Trash nodes that look cruddy (like ones
@@ -711,10 +713,9 @@ func (w *Worker) grabArticle() *html.Node {
 						if p != nil {
 							appendChild(p, childNode)
 						} else if !w.isWhitespace(childNode) {
-							tmpChildNode := *childNode
 							p = createElement("p")
+							appendChild(p, cloneNode(childNode))
 							replaceNode(childNode, p)
-							appendChild(p, &tmpChildNode)
 						}
 					} else if p != nil {
 						for p.LastChild != nil && w.isWhitespace(p.LastChild) {
@@ -1042,7 +1043,7 @@ func (w *Worker) grabArticle() *html.Node {
 		textLength := len(w.getInnerText(articleContent, true))
 		if textLength < w.CharThresholds {
 			parseSuccessful = false
-			page = &pageCache
+			page = pageCache
 
 			if w.Flags.StripUnlikelys {
 				w.Flags.StripUnlikelys = false
