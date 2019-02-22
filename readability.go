@@ -679,11 +679,13 @@ func (w *Worker) grabArticle() *html.Node {
 
 			// Remove unlikely candidates
 			nodeTagName := tagName(node)
-			if rxUnlikelyCandidates.MatchString(matchString) &&
-				!rxOkMaybeItsACandidate.MatchString(matchString) &&
-				nodeTagName != "body" && nodeTagName != "a" {
-				node = w.removeAndGetNext(node)
-				continue
+			if w.Flags.StripUnlikelys {
+				if rxUnlikelyCandidates.MatchString(matchString) &&
+					!rxOkMaybeItsACandidate.MatchString(matchString) &&
+					nodeTagName != "body" && nodeTagName != "a" {
+					node = w.removeAndGetNext(node)
+					continue
+				}
 			}
 
 			// Remove DIV, SECTION, and HEADER nodes without any
