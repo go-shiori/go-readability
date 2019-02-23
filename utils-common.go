@@ -2,10 +2,7 @@ package readability
 
 import (
 	nurl "net/url"
-	"os"
 	"strings"
-
-	"golang.org/x/net/html"
 )
 
 // indexOf returns the position of the first occurrence of a
@@ -50,10 +47,4 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 	}
 
 	return base.ResolveReference(tmp).String()
-}
-
-func renderToFile(element *html.Node, filename string) {
-	dstFile, _ := os.Create(filename)
-	defer dstFile.Close()
-	html.Render(dstFile, element)
 }

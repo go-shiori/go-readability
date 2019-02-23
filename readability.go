@@ -69,6 +69,17 @@ type parseAttempt struct {
 	textLength     int
 }
 
+// Article is the final readable content.
+type Article struct {
+	Title       string
+	Byline      string
+	Content     string
+	TextContent string
+	Length      int
+	Excerpt     string
+	SiteName    string
+}
+
 // Worker is the worker that parses the page to get the readable content.
 type Worker struct {
 	// MaxElemsToParse is the max number of nodes supported by this
@@ -647,7 +658,6 @@ func (w *Worker) grabArticle() *html.Node {
 	}
 
 	pageCache := cloneNode(page)
-	renderToFile(doc, "step-1.html")
 	for {
 		// First, node prepping. Trash nodes that look cruddy (like ones
 		// with the class name "comment", etc), and turn divs into P
@@ -741,8 +751,6 @@ func (w *Worker) grabArticle() *html.Node {
 			node = w.getNextNode(node, false)
 		}
 
-		renderToFile(doc, "step-2.html")
-
 		// Loop through all paragraphs, and assign a score to them based
 		// on how content-y they look. Then add their score to their
 		// parent node. A score is determined by things like number of
@@ -804,8 +812,6 @@ func (w *Worker) grabArticle() *html.Node {
 				w.setContentScore(ancestor, ancestorScore)
 			})
 		})
-
-		renderToFile(doc, "step-3.html")
 
 		// These lines are a bit different compared to Readability.js.
 		// In Readability.js, they fetch NTopCandidates utilising array
@@ -943,8 +949,6 @@ func (w *Worker) grabArticle() *html.Node {
 			}
 		}
 
-		renderToFile(topCandidate, "step-4.html")
-
 		// Now that we have the top candidate, look through its siblings
 		// for content that might also be related. Things like preambles,
 		// content split by ads that we removed, etc.
@@ -999,13 +1003,9 @@ func (w *Worker) grabArticle() *html.Node {
 			}
 		}
 
-		renderToFile(articleContent, "step-4b.html")
-
 		// So we have all of the content that we need. Now we clean
 		// it up for presentation.
 		w.prepArticle(articleContent)
-
-		renderToFile(articleContent, "step-4c.html")
 
 		if neededToCreateTopCandidate {
 			// We already created a fake div thing, and there wouldn't
@@ -1017,7 +1017,6 @@ func (w *Worker) grabArticle() *html.Node {
 			setAttribute(topCandidate, "id", "readability-page-1")
 			setAttribute(topCandidate, "class", "page")
 		} else {
-			renderToFile(articleContent, "step-4d.html")
 			div := createElement("div")
 			setAttribute(div, "id", "readability-page-1")
 			setAttribute(div, "class", "page")
@@ -1082,7 +1081,6 @@ func (w *Worker) grabArticle() *html.Node {
 		}
 
 		if parseSuccessful {
-			renderToFile(articleContent, "step-5.html")
 			return articleContent
 		}
 	}
@@ -1577,7 +1575,7 @@ func (w *Worker) isProbablyVisible(node *html.Node) bool {
 // 3. Grab the article content from the current dom tree.
 // 4. Replace the current DOM tree with the new one.
 // 5. Read peacefully.
-func (w *Worker) Parse(input io.Reader, pageURL string) error {
+func (w *Worker) Parse(input io.Reader, pageURL string) (Article, error) {
 	// Reset worker data
 	w.articleTitle = ""
 	w.articleByline = ""
@@ -1594,20 +1592,20 @@ func (w *Worker) Parse(input io.Reader, pageURL string) error {
 	var err error
 	w.documentURI, err = nurl.ParseRequestURI(pageURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse URL: %v", err)
+		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
 	}
 
 	// Parse input
 	w.doc, err = html.Parse(input)
 	if err != nil {
-		return fmt.Errorf("failed to parse input: %v", err)
+		return Article{}, fmt.Errorf("failed to parse input: %v", err)
 	}
 
 	// Avoid parsing too large documents, as per configuration option
 	if w.MaxElemsToParse > 0 {
 		numTags := len(getElementsByTagName(w.doc, "*"))
 		if numTags > w.MaxElemsToParse {
-			return fmt.Errorf("documents too large: %d elements", numTags)
+			return Article{}, fmt.Errorf("documents too large: %d elements", numTags)
 		}
 	}
 
@@ -1621,7 +1619,7 @@ func (w *Worker) Parse(input io.Reader, pageURL string) error {
 
 	articleContent := w.grabArticle()
 	if articleContent == nil {
-		return nil
+		return Article{}, fmt.Errorf("unable to find readable content")
 	}
 
 	w.postProcessContent(articleContent)
@@ -1636,8 +1634,25 @@ func (w *Worker) Parse(input io.Reader, pageURL string) error {
 		}
 	}
 
-	renderToFile(articleContent, "step-final.html")
-	return nil
+	finalHTMLContent := innerHTML(articleContent)
+
+	finalTextContent := textContent(articleContent)
+	finalTextContent = strings.TrimSpace(finalTextContent)
+
+	finalByline := metadata["byline"]
+	if finalByline == "" {
+		finalByline = w.articleByline
+	}
+
+	return Article{
+		Title:       w.articleTitle,
+		Byline:      finalByline,
+		Content:     finalHTMLContent,
+		TextContent: finalTextContent,
+		Length:      len(finalTextContent),
+		Excerpt:     metadata["excerpt"],
+		SiteName:    metadata["siteName"],
+	}, nil
 }
 
 // Methods below these point are not exist in Readability.js.
