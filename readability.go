@@ -39,7 +39,6 @@ var (
 	rxDisplayNone          = regexp.MustCompile(`(?i)display\s*:\s*none`)
 	rxSentencePeriod       = regexp.MustCompile(`(?i)\.( |$)`)
 	rxShare                = regexp.MustCompile(`(?i)share`)
-	rxInnerHTML            = regexp.MustCompile(`(?is)^\s*<[^>]*>(.*)</[^>]>\s*$`)
 )
 
 // Constants that used by readability.

@@ -146,9 +146,17 @@ func outerHTML(node *html.Node) string {
 
 // innerHTML returns the HTML content (inner HTML) of an element.
 func innerHTML(node *html.Node) string {
-	outer := outerHTML(node)
-	inner := rxInnerHTML.ReplaceAllString(outer, "$1")
-	return strings.TrimSpace(inner)
+	var err error
+	var buffer bytes.Buffer
+
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		err = html.Render(&buffer, child)
+		if err != nil {
+			return ""
+		}
+	}
+
+	return strings.TrimSpace(buffer.String())
 }
 
 // documentElement returns the Element that is the root element
