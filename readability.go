@@ -1,4 +1,4 @@
-// Go-Readability is a Go package that find the main readable
+// Package readability is a Go package that find the main readable
 // content from a HTML page. It works by removing clutter like buttons,
 // ads, background images, script, etc.
 //
