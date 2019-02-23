@@ -1,3 +1,11 @@
+// Go-Readability is a Go package that find the main readable
+// content from a HTML page. It works by removing clutter like buttons,
+// ads, background images, script, etc.
+//
+// This package is based from Readability.js by Mozilla, and written line
+// by line to make sure it looks and works as similar as possible. This
+// way, hopefully all web page that can be parsed by Readability.js
+// are parse-able by go-readability as well.
 package readability
 
 import (

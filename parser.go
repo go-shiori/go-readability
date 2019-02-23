@@ -1568,12 +1568,6 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 }
 
 // Parse parses input and find the main readable content.
-// Workflow:
-// 1. Prep the document by removing script tags, css, etc.
-// 2. Build readability's DOM tree.
-// 3. Grab the article content from the current dom tree.
-// 4. Replace the current DOM tree with the new one.
-// 5. Read peacefully.
 func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	// Reset parser data
 	ps.articleTitle = ""
