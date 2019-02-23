@@ -56,18 +56,11 @@ var (
 		"sup", "textarea", "time", "var", "wbr"}
 )
 
-// Flags is flags that used by worker.
-type Flags struct {
-	StripUnlikelys     bool
-	UseWeightClasses   bool
-	CleanConditionally bool
-}
-
-// DefaultFlags is the default flags, which activate all options.
-var DefaultFlags = Flags{
-	StripUnlikelys:     true,
-	UseWeightClasses:   true,
-	CleanConditionally: true,
+// flags is flags that used by worker.
+type flags struct {
+	stripUnlikelys     bool
+	useWeightClasses   bool
+	cleanConditionally bool
 }
 
 // parseAttempt is container for the result of previous parse attempts.
@@ -78,8 +71,6 @@ type parseAttempt struct {
 
 // Worker is the worker that parses the page to get the readable content.
 type Worker struct {
-	// Flags is flags that will be used by this worker.
-	Flags Flags
 	// MaxElemsToParse is the max number of nodes supported by this
 	// worker. Default: 0 (no limit)
 	MaxElemsToParse int
@@ -103,12 +94,12 @@ type Worker struct {
 	articleDir      string
 	articleSiteName string
 	attempts        []parseAttempt
+	flags           flags
 }
 
 // NewWorker returns new Worker which set up with default value.
-func NewWorker(flags Flags) Worker {
+func NewWorker() Worker {
 	return Worker{
-		Flags:             flags,
 		MaxElemsToParse:   0,
 		NTopCandidates:    5,
 		CharThresholds:    500,
@@ -682,7 +673,7 @@ func (w *Worker) grabArticle() *html.Node {
 
 			// Remove unlikely candidates
 			nodeTagName := tagName(node)
-			if w.Flags.StripUnlikelys {
+			if w.flags.stripUnlikelys {
 				if rxUnlikelyCandidates.MatchString(matchString) &&
 					!rxOkMaybeItsACandidate.MatchString(matchString) &&
 					nodeTagName != "body" && nodeTagName != "a" {
@@ -1050,20 +1041,20 @@ func (w *Worker) grabArticle() *html.Node {
 			parseSuccessful = false
 			page = pageCache
 
-			if w.Flags.StripUnlikelys {
-				w.Flags.StripUnlikelys = false
+			if w.flags.stripUnlikelys {
+				w.flags.stripUnlikelys = false
 				w.attempts = append(w.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
-			} else if w.Flags.UseWeightClasses {
-				w.Flags.UseWeightClasses = false
+			} else if w.flags.useWeightClasses {
+				w.flags.useWeightClasses = false
 				w.attempts = append(w.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
-			} else if w.Flags.CleanConditionally {
-				w.Flags.CleanConditionally = false
+			} else if w.flags.cleanConditionally {
+				w.flags.cleanConditionally = false
 				w.attempts = append(w.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
@@ -1313,7 +1304,7 @@ func (w *Worker) getLinkDensity(element *html.Node) float64 {
 // getClassWeight gets an elements class/id weight. Uses regular
 // expressions to tell if this element looks good or bad.
 func (w *Worker) getClassWeight(node *html.Node) int {
-	if !w.Flags.UseWeightClasses {
+	if !w.flags.useWeightClasses {
 		return 0
 	}
 
@@ -1495,7 +1486,7 @@ func (w *Worker) markDataTables(root *html.Node) {
 // they look fishy. "Fishy" is an algorithm based on content length,
 // classnames, link density, number of images & embeds, etc.
 func (w *Worker) cleanConditionally(element *html.Node, tag string) {
-	if !w.Flags.CleanConditionally {
+	if !w.flags.cleanConditionally {
 		return
 	}
 
@@ -1593,6 +1584,11 @@ func (w *Worker) Parse(input io.Reader, pageURL string) error {
 	w.articleDir = ""
 	w.articleSiteName = ""
 	w.attempts = []parseAttempt{}
+	w.flags = flags{
+		stripUnlikelys:     true,
+		useWeightClasses:   true,
+		cleanConditionally: true,
+	}
 
 	// Parse page url
 	var err error
