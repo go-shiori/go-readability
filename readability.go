@@ -126,6 +126,9 @@ func (w *Worker) postProcessContent(articleContent *html.Node) {
 
 	// Remove classes.
 	w.cleanClasses(articleContent)
+
+	// Remove readability attributes.
+	w.clearReadabilityAttr(articleContent)
 }
 
 // removeNodes iterates over a NodeList, calls `filterFn` for each node
@@ -1637,6 +1640,7 @@ func (w *Worker) Parse(input io.Reader, pageURL string) error {
 		}
 	}
 
+	renderToFile(articleContent, "step-final.html")
 	return nil
 }
 
@@ -1688,4 +1692,15 @@ func (w *Worker) getContentScore(node *html.Node) float64 {
 
 	score, _ := strconv.ParseFloat(strScore, 64)
 	return score
+}
+
+// clearReadabilityAttr removes Readability attribute that
+// created by this package.
+func (w *Worker) clearReadabilityAttr(node *html.Node) {
+	removeAttribute(node, "data-readability-score")
+	removeAttribute(node, "data-readability-table")
+
+	for child := firstElementChild(node); child != nil; child = nextElementSibling(child) {
+		w.clearReadabilityAttr(child)
+	}
 }
