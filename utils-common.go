@@ -45,8 +45,8 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 
 	// Otherwise, resolve against base URI:
 	tmp, err = nurl.Parse(uri)
-	if err != nil || tmp.Scheme == "" || tmp.Hostname() == "" {
-		return ""
+	if err != nil {
+		return uri
 	}
 
 	return base.ResolveReference(tmp).String()
