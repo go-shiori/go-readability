@@ -14,7 +14,7 @@ import (
 )
 
 // All of the regular expressions in use within readability.
-// Defined up here so we don't instantiate them repeatedly in loops.
+// Defined up here so we don't instantiate them repeatedly in loops *.
 var (
 	rxUnlikelyCandidates   = regexp.MustCompile(`(?i)-ad-|banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|foot|gdpr|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
 	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|main|shadow`)
@@ -55,7 +55,7 @@ var (
 		"sup", "textarea", "time", "var", "wbr"}
 )
 
-// flags is flags that used by worker.
+// flags is flags that used by parser.
 type flags struct {
 	stripUnlikelys     bool
 	useWeightClasses   bool
@@ -79,10 +79,10 @@ type Article struct {
 	SiteName    string
 }
 
-// Worker is the worker that parses the page to get the readable content.
-type Worker struct {
+// Parser is the parser that parses the page to get the readable content.
+type Parser struct {
 	// MaxElemsToParse is the max number of nodes supported by this
-	// worker. Default: 0 (no limit)
+	// parser. Default: 0 (no limit)
 	MaxElemsToParse int
 	// NTopCandidates is the number of top candidates to consider when
 	// analysing how tight the competition is among candidates.
@@ -107,9 +107,9 @@ type Worker struct {
 	flags           flags
 }
 
-// NewWorker returns new Worker which set up with default value.
-func NewWorker() Worker {
-	return Worker{
+// NewParser returns new Parser which set up with default value.
+func NewParser() Parser {
+	return Parser{
 		MaxElemsToParse:   0,
 		NTopCandidates:    5,
 		CharThresholds:    500,
@@ -121,21 +121,21 @@ func NewWorker() Worker {
 
 // postProcessContent runs any post-process modifications to article
 // content as necessary.
-func (w *Worker) postProcessContent(articleContent *html.Node) {
+func (ps *Parser) postProcessContent(articleContent *html.Node) {
 	// Readability cannot open relative uris so we convert them to absolute uris.
-	w.fixRelativeURIs(articleContent)
+	ps.fixRelativeURIs(articleContent)
 
 	// Remove classes.
-	w.cleanClasses(articleContent)
+	ps.cleanClasses(articleContent)
 
 	// Remove readability attributes.
-	w.clearReadabilityAttr(articleContent)
+	ps.clearReadabilityAttr(articleContent)
 }
 
 // removeNodes iterates over a NodeList, calls `filterFn` for each node
 // and removes node if function returned `true`. If function is not
 // passed, removes all the nodes in node list.
-func (w *Worker) removeNodes(nodeList []*html.Node, filterFn func(*html.Node) bool) {
+func (ps *Parser) removeNodes(nodeList []*html.Node, filterFn func(*html.Node) bool) {
 	for i := len(nodeList) - 1; i >= 0; i-- {
 		node := nodeList[i]
 		parentNode := node.Parent
@@ -147,15 +147,15 @@ func (w *Worker) removeNodes(nodeList []*html.Node, filterFn func(*html.Node) bo
 
 // replaceNodeTags iterates over a NodeList, and calls setNodeTag for
 // each node.
-func (w *Worker) replaceNodeTags(nodeList []*html.Node, newTagName string) {
+func (ps *Parser) replaceNodeTags(nodeList []*html.Node, newTagName string) {
 	for i := len(nodeList) - 1; i >= 0; i-- {
 		node := nodeList[i]
-		w.setNodeTag(node, newTagName)
+		ps.setNodeTag(node, newTagName)
 	}
 }
 
 // forEachNode iterates over a NodeList and runs fn on each node.
-func (w *Worker) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
+func (ps *Parser) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 	for i := 0; i < len(nodeList); i++ {
 		fn(nodeList[i], i)
 	}
@@ -163,7 +163,7 @@ func (w *Worker) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 
 // someNode iterates over a NodeList, return true if any of the
 // provided iterate function calls returns true, false otherwise.
-func (w *Worker) someNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
+func (ps *Parser) someNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
 	for i := 0; i < len(nodeList); i++ {
 		if fn(nodeList[i]) {
 			return true
@@ -174,7 +174,7 @@ func (w *Worker) someNode(nodeList []*html.Node, fn func(*html.Node) bool) bool 
 
 // everyNode iterates over a NodeList, return true if all of the
 // provided iterate function calls returns true, false otherwise.
-func (w *Worker) everyNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
+func (ps *Parser) everyNode(nodeList []*html.Node, fn func(*html.Node) bool) bool {
 	for i := 0; i < len(nodeList); i++ {
 		if !fn(nodeList[i]) {
 			return false
@@ -184,7 +184,7 @@ func (w *Worker) everyNode(nodeList []*html.Node, fn func(*html.Node) bool) bool
 }
 
 // concatNodeLists concats all nodelists passed as arguments.
-func (w *Worker) concatNodeLists(nodeLists ...[]*html.Node) []*html.Node {
+func (ps *Parser) concatNodeLists(nodeLists ...[]*html.Node) []*html.Node {
 	var result []*html.Node
 	for i := 0; i < len(nodeLists); i++ {
 		result = append(result, nodeLists[i]...)
@@ -193,7 +193,7 @@ func (w *Worker) concatNodeLists(nodeLists ...[]*html.Node) []*html.Node {
 }
 
 // getAllNodesWithTag returns all nodes that has tag inside tagNames.
-func (w *Worker) getAllNodesWithTag(node *html.Node, tagNames ...string) []*html.Node {
+func (ps *Parser) getAllNodesWithTag(node *html.Node, tagNames ...string) []*html.Node {
 	var result []*html.Node
 	for i := 0; i < len(tagNames); i++ {
 		result = append(result, getElementsByTagName(node, tagNames[i])...)
@@ -204,11 +204,11 @@ func (w *Worker) getAllNodesWithTag(node *html.Node, tagNames ...string) []*html
 // cleanClasses Removes the class="" attribute from every element in the
 // given subtree, except those that match CLASSES_TO_PRESERVE and the
 // classesToPreserve array from the options object.
-func (w *Worker) cleanClasses(node *html.Node) {
+func (ps *Parser) cleanClasses(node *html.Node) {
 	nodeClassName := className(node)
 	preservedClassName := []string{}
 	for _, class := range strings.Fields(nodeClassName) {
-		if indexOf(w.ClassesToPreserve, class) != -1 {
+		if indexOf(ps.ClassesToPreserve, class) != -1 {
 			preservedClassName = append(preservedClassName, class)
 		}
 	}
@@ -220,15 +220,15 @@ func (w *Worker) cleanClasses(node *html.Node) {
 	}
 
 	for child := firstElementChild(node); child != nil; child = nextElementSibling(child) {
-		w.cleanClasses(child)
+		ps.cleanClasses(child)
 	}
 }
 
 // fixRelativeURIs converts each <a> and <img> uri in the given element
 // to an absolute URI, ignoring #ref URIs.
-func (w *Worker) fixRelativeURIs(articleContent *html.Node) {
-	links := w.getAllNodesWithTag(articleContent, "a")
-	w.forEachNode(links, func(link *html.Node, _ int) {
+func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
+	links := ps.getAllNodesWithTag(articleContent, "a")
+	ps.forEachNode(links, func(link *html.Node, _ int) {
 		href := getAttribute(link, "href")
 		if href == "" {
 			return
@@ -241,7 +241,7 @@ func (w *Worker) fixRelativeURIs(articleContent *html.Node) {
 			text := createTextNode(textContent(link))
 			replaceNode(link, text)
 		} else {
-			newHref := toAbsoluteURI(href, w.documentURI)
+			newHref := toAbsoluteURI(href, ps.documentURI)
 			if newHref == "" {
 				removeAttribute(link, "href")
 			} else {
@@ -250,14 +250,14 @@ func (w *Worker) fixRelativeURIs(articleContent *html.Node) {
 		}
 	})
 
-	imgs := w.getAllNodesWithTag(articleContent, "img")
-	w.forEachNode(imgs, func(img *html.Node, _ int) {
+	imgs := ps.getAllNodesWithTag(articleContent, "img")
+	ps.forEachNode(imgs, func(img *html.Node, _ int) {
 		src := getAttribute(img, "src")
 		if src == "" {
 			return
 		}
 
-		newSrc := toAbsoluteURI(src, w.documentURI)
+		newSrc := toAbsoluteURI(src, ps.documentURI)
 		if newSrc == "" {
 			removeAttribute(img, "src")
 		} else {
@@ -267,15 +267,15 @@ func (w *Worker) fixRelativeURIs(articleContent *html.Node) {
 }
 
 // getArticleTitle attempts to get the article title.
-func (w *Worker) getArticleTitle() string {
-	doc := w.doc
+func (ps *Parser) getArticleTitle() string {
+	doc := ps.doc
 	curTitle := ""
 	origTitle := ""
 	titleHadHierarchicalSeparators := false
 
 	// If they had an element with tag "title" in their HTML
 	if nodes := getElementsByTagName(doc, "title"); len(nodes) > 0 {
-		origTitle = w.getInnerText(nodes[0], true)
+		origTitle = ps.getInnerText(nodes[0], true)
 		curTitle = origTitle
 	}
 
@@ -292,13 +292,13 @@ func (w *Worker) getArticleTitle() string {
 	} else if strings.Index(curTitle, ": ") != -1 {
 		// Check if we have an heading containing this exact string, so
 		// we could assume it's the full title.
-		headings := w.concatNodeLists(
+		headings := ps.concatNodeLists(
 			getElementsByTagName(doc, "h1"),
 			getElementsByTagName(doc, "h2"),
 		)
 
 		trimmedTitle := strings.TrimSpace(curTitle)
-		match := w.someNode(headings, func(heading *html.Node) bool {
+		match := ps.someNode(headings, func(heading *html.Node) bool {
 			return strings.TrimSpace(textContent(heading)) == trimmedTitle
 		})
 
@@ -319,7 +319,7 @@ func (w *Worker) getArticleTitle() string {
 		}
 	} else if len(curTitle) > 150 || len(curTitle) < 15 {
 		if hOnes := getElementsByTagName(doc, "h1"); len(hOnes) == 1 {
-			curTitle = w.getInnerText(hOnes[0], true)
+			curTitle = ps.getInnerText(hOnes[0], true)
 		}
 	}
 
@@ -344,23 +344,23 @@ func (w *Worker) getArticleTitle() string {
 // prepDocument prepares the HTML document for readability to scrape it.
 // This includes things like stripping javascript, CSS, and handling
 // terrible markup.
-func (w *Worker) prepDocument() {
-	doc := w.doc
+func (ps *Parser) prepDocument() {
+	doc := ps.doc
 
 	// Remove all style tags in head
-	w.removeNodes(getElementsByTagName(doc, "style"), nil)
+	ps.removeNodes(getElementsByTagName(doc, "style"), nil)
 
 	if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 && nodes[0] != nil {
-		w.replaceBrs(nodes[0])
+		ps.replaceBrs(nodes[0])
 	}
 
-	w.replaceNodeTags(getElementsByTagName(doc, "font"), "span")
+	ps.replaceNodeTags(getElementsByTagName(doc, "font"), "span")
 }
 
 // nextElement finds the next element, starting from the given node, and
 // ignoring whitespace in between. If the given node is an element, the
 // same node is returned.
-func (w *Worker) nextElement(node *html.Node) *html.Node {
+func (ps *Parser) nextElement(node *html.Node) *html.Node {
 	next := node
 	for next != nil && next.Type != html.ElementNode && rxWhitespace.MatchString(textContent(next)) {
 		next = next.NextSibling
@@ -373,8 +373,8 @@ func (w *Worker) nextElement(node *html.Node) *html.Node {
 //   <div>foo<br>bar<br> <br><br>abc</div>
 // will become:
 //   <div>foo<br>bar<p>abc</p></div>
-func (w *Worker) replaceBrs(elem *html.Node) {
-	w.forEachNode(w.getAllNodesWithTag(elem, "br"), func(br *html.Node, _ int) {
+func (ps *Parser) replaceBrs(elem *html.Node) {
+	ps.forEachNode(ps.getAllNodesWithTag(elem, "br"), func(br *html.Node, _ int) {
 		next := br.NextSibling
 
 		// Whether 2 or more <br> elements have been found and replaced
@@ -385,7 +385,7 @@ func (w *Worker) replaceBrs(elem *html.Node) {
 		// element or non-whitespace. This leaves behind the first <br>
 		// in the chain (which will be replaced with a <p> later).
 		for {
-			next = w.nextElement(next)
+			next = ps.nextElement(next)
 			if next == nil || tagName(next) != "br" {
 				break
 			}
@@ -407,13 +407,13 @@ func (w *Worker) replaceBrs(elem *html.Node) {
 			for next != nil {
 				// If we've hit another <br><br>, we're done adding children to this <p>.
 				if tagName(next) == "br" {
-					nextElem := w.nextElement(next.NextSibling)
+					nextElem := ps.nextElement(next.NextSibling)
 					if nextElem != nil && tagName(nextElem) == "br" {
 						break
 					}
 				}
 
-				if !w.isPhrasingContent(next) {
+				if !ps.isPhrasingContent(next) {
 					break
 				}
 
@@ -423,19 +423,19 @@ func (w *Worker) replaceBrs(elem *html.Node) {
 				next = sibling
 			}
 
-			for p.LastChild != nil && w.isWhitespace(p.LastChild) {
+			for p.LastChild != nil && ps.isWhitespace(p.LastChild) {
 				p.RemoveChild(p.LastChild)
 			}
 
 			if tagName(p.Parent) == "p" {
-				w.setNodeTag(p.Parent, "div")
+				ps.setNodeTag(p.Parent, "div")
 			}
 		}
 	})
 }
 
 // setNodeTag changes tag of the node to newTagName.
-func (w *Worker) setNodeTag(node *html.Node, newTagName string) {
+func (ps *Parser) setNodeTag(node *html.Node, newTagName string) {
 	if node.Type == html.ElementNode {
 		node.Data = newTagName
 	}
@@ -443,30 +443,30 @@ func (w *Worker) setNodeTag(node *html.Node, newTagName string) {
 
 // prepArticle prepares the article node for display. Clean out any
 // inline styles, iframes, forms, strip extraneous <p> tags, etc.
-func (w *Worker) prepArticle(articleContent *html.Node) {
-	w.cleanStyles(articleContent)
+func (ps *Parser) prepArticle(articleContent *html.Node) {
+	ps.cleanStyles(articleContent)
 
 	// Check for data tables before we continue, to avoid removing
 	// items in those tables, which will often be isolated even
 	// though they're visually linked to other content-ful elements
 	// (text, images, etc.).
-	w.markDataTables(articleContent)
+	ps.markDataTables(articleContent)
 
 	// Clean out junk from the article content
-	w.cleanConditionally(articleContent, "form")
-	w.cleanConditionally(articleContent, "fieldset")
-	w.clean(articleContent, "object")
-	w.clean(articleContent, "embed")
-	w.clean(articleContent, "h1")
-	w.clean(articleContent, "footer")
-	w.clean(articleContent, "link")
-	w.clean(articleContent, "aside")
+	ps.cleanConditionally(articleContent, "form")
+	ps.cleanConditionally(articleContent, "fieldset")
+	ps.clean(articleContent, "object")
+	ps.clean(articleContent, "embed")
+	ps.clean(articleContent, "h1")
+	ps.clean(articleContent, "footer")
+	ps.clean(articleContent, "link")
+	ps.clean(articleContent, "aside")
 
 	// Clean out elements have "share" in their id/class combinations
 	// from final top candidates, which means we don't remove the top
 	// candidates even they have "share".
-	w.forEachNode(children(articleContent), func(topCandidate *html.Node, _ int) {
-		w.cleanMatchedNodes(topCandidate, rxShare)
+	ps.forEachNode(children(articleContent), func(topCandidate *html.Node, _ int) {
+		ps.cleanMatchedNodes(topCandidate, rxShare)
 	})
 
 	// If there is only one h2 and its text content substantially
@@ -476,35 +476,35 @@ func (w *Worker) prepArticle(articleContent *html.Node) {
 	if h2s := getElementsByTagName(articleContent, "h2"); len(h2s) == 1 {
 		h2 := h2s[0]
 		h2Text := textContent(h2)
-		lengthSimilarRate := float64(len(h2Text)-len(w.articleTitle)) / float64(len(w.articleTitle))
+		lengthSimilarRate := float64(len(h2Text)-len(ps.articleTitle)) / float64(len(ps.articleTitle))
 		if math.Abs(lengthSimilarRate) < 0.5 {
 			titlesMatch := false
 			if lengthSimilarRate > 0 {
-				titlesMatch = strings.Contains(h2Text, w.articleTitle)
+				titlesMatch = strings.Contains(h2Text, ps.articleTitle)
 			} else {
-				titlesMatch = strings.Contains(w.articleTitle, h2Text)
+				titlesMatch = strings.Contains(ps.articleTitle, h2Text)
 			}
 			if titlesMatch {
-				w.clean(articleContent, "h2")
+				ps.clean(articleContent, "h2")
 			}
 		}
 	}
 
-	w.clean(articleContent, "iframe")
-	w.clean(articleContent, "input")
-	w.clean(articleContent, "textarea")
-	w.clean(articleContent, "select")
-	w.clean(articleContent, "button")
-	w.cleanHeaders(articleContent)
+	ps.clean(articleContent, "iframe")
+	ps.clean(articleContent, "input")
+	ps.clean(articleContent, "textarea")
+	ps.clean(articleContent, "select")
+	ps.clean(articleContent, "button")
+	ps.cleanHeaders(articleContent)
 
 	// Do these last as the previous stuff may have removed junk
 	// that will affect these
-	w.cleanConditionally(articleContent, "table")
-	w.cleanConditionally(articleContent, "ul")
-	w.cleanConditionally(articleContent, "div")
+	ps.cleanConditionally(articleContent, "table")
+	ps.cleanConditionally(articleContent, "ul")
+	ps.cleanConditionally(articleContent, "div")
 
 	// Remove extra paragraphs
-	w.removeNodes(getElementsByTagName(articleContent, "p"), func(p *html.Node) bool {
+	ps.removeNodes(getElementsByTagName(articleContent, "p"), func(p *html.Node) bool {
 		imgCount := len(getElementsByTagName(p, "img"))
 		embedCount := len(getElementsByTagName(p, "embed"))
 		objectCount := len(getElementsByTagName(p, "object"))
@@ -513,34 +513,34 @@ func (w *Worker) prepArticle(articleContent *html.Node) {
 		iframeCount := len(getElementsByTagName(p, "iframe"))
 		totalCount := imgCount + embedCount + objectCount + iframeCount
 
-		return totalCount == 0 && w.getInnerText(p, false) == ""
+		return totalCount == 0 && ps.getInnerText(p, false) == ""
 	})
 
-	w.forEachNode(getElementsByTagName(articleContent, "br"), func(br *html.Node, _ int) {
-		next := w.nextElement(br.NextSibling)
+	ps.forEachNode(getElementsByTagName(articleContent, "br"), func(br *html.Node, _ int) {
+		next := ps.nextElement(br.NextSibling)
 		if next != nil && tagName(next) == "p" {
 			br.Parent.RemoveChild(br)
 		}
 	})
 
 	// Remove single-cell tables
-	w.forEachNode(getElementsByTagName(articleContent, "table"), func(table *html.Node, _ int) {
+	ps.forEachNode(getElementsByTagName(articleContent, "table"), func(table *html.Node, _ int) {
 		tbody := table
-		if w.hasSingleTagInsideElement(table, "tbody") {
+		if ps.hasSingleTagInsideElement(table, "tbody") {
 			tbody = firstElementChild(table)
 		}
 
-		if w.hasSingleTagInsideElement(tbody, "tr") {
+		if ps.hasSingleTagInsideElement(tbody, "tr") {
 			row := firstElementChild(tbody)
-			if w.hasSingleTagInsideElement(row, "td") {
+			if ps.hasSingleTagInsideElement(row, "td") {
 				cell := firstElementChild(row)
 
 				newTag := "div"
-				if w.everyNode(childNodes(cell), w.isPhrasingContent) {
+				if ps.everyNode(childNodes(cell), ps.isPhrasingContent) {
 					newTag = "p"
 				}
 
-				w.setNodeTag(cell, newTag)
+				ps.setNodeTag(cell, newTag)
 				replaceNode(table, cell)
 			}
 		}
@@ -549,8 +549,8 @@ func (w *Worker) prepArticle(articleContent *html.Node) {
 
 // initializeNode initializes a node with the readability score.
 // Also checks the className/id for special names to add to its score.
-func (w *Worker) initializeNode(node *html.Node) {
-	contentScore := float64(w.getClassWeight(node))
+func (ps *Parser) initializeNode(node *html.Node) {
+	contentScore := float64(ps.getClassWeight(node))
 	switch tagName(node) {
 	case "div":
 		contentScore += 5
@@ -562,12 +562,12 @@ func (w *Worker) initializeNode(node *html.Node) {
 		contentScore -= 5
 	}
 
-	w.setContentScore(node, contentScore)
+	ps.setContentScore(node, contentScore)
 }
 
 // removeAndGetNext remove node and returns its next node.
-func (w *Worker) removeAndGetNext(node *html.Node) *html.Node {
-	nextNode := w.getNextNode(node, true)
+func (ps *Parser) removeAndGetNext(node *html.Node) *html.Node {
+	nextNode := ps.getNextNode(node, true)
 	if node.Parent != nil {
 		node.Parent.RemoveChild(node)
 	}
@@ -580,7 +580,7 @@ func (w *Worker) removeAndGetNext(node *html.Node) *html.Node {
 // next node over. Calling this in a loop will traverse the DOM
 // depth-first.
 // In Readability.js, ignoreSelfAndKids default to false.
-func (w *Worker) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Node {
+func (ps *Parser) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Node {
 	// First check for kids if those aren't being ignored
 	if firstChild := firstElementChild(node); !ignoreSelfAndKids && firstChild != nil {
 		return firstChild
@@ -609,14 +609,14 @@ func (w *Worker) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Node
 }
 
 // checkByline determines if a node is used as byline.
-func (w *Worker) checkByline(node *html.Node, matchString string) bool {
-	if w.articleByline != "" {
+func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
+	if ps.articleByline != "" {
 		return false
 	}
 
 	rel := getAttribute(node, "rel")
-	if (rel == "author" || rxByline.MatchString(matchString)) && w.isValidByline(textContent(node)) {
-		w.articleByline = strings.TrimSpace(textContent(node))
+	if (rel == "author" || rxByline.MatchString(matchString)) && ps.isValidByline(textContent(node)) {
+		ps.articleByline = strings.TrimSpace(textContent(node))
 		return true
 	}
 
@@ -625,7 +625,7 @@ func (w *Worker) checkByline(node *html.Node, matchString string) bool {
 
 // getNodeAncestors gets the node's direct parent and grandparents.
 // In Readability.js, maxDepth default to 0.
-func (w *Worker) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
+func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 	i := 0
 	var ancestors []*html.Node
 
@@ -643,8 +643,8 @@ func (w *Worker) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // grabArticle uses a variety of metrics (content score, classname,
 // element types), find the content that is most likely to be the
 // stuff a user wants to read. Then return it wrapped up in a div.
-func (w *Worker) grabArticle() *html.Node {
-	doc := w.doc
+func (ps *Parser) grabArticle() *html.Node {
+	doc := ps.doc
 
 	var page *html.Node
 	if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 {
@@ -668,25 +668,25 @@ func (w *Worker) grabArticle() *html.Node {
 		for node != nil {
 			matchString := className(node) + " " + id(node)
 
-			if !w.isProbablyVisible(node) {
-				node = w.removeAndGetNext(node)
+			if !ps.isProbablyVisible(node) {
+				node = ps.removeAndGetNext(node)
 				continue
 			}
 
 			// Check to see if this node is a byline, and remove it if
 			// it is true.
-			if w.checkByline(node, matchString) {
-				node = w.removeAndGetNext(node)
+			if ps.checkByline(node, matchString) {
+				node = ps.removeAndGetNext(node)
 				continue
 			}
 
 			// Remove unlikely candidates
 			nodeTagName := tagName(node)
-			if w.flags.stripUnlikelys {
+			if ps.flags.stripUnlikelys {
 				if rxUnlikelyCandidates.MatchString(matchString) &&
 					!rxOkMaybeItsACandidate.MatchString(matchString) &&
 					nodeTagName != "body" && nodeTagName != "a" {
-					node = w.removeAndGetNext(node)
+					node = ps.removeAndGetNext(node)
 					continue
 				}
 			}
@@ -696,13 +696,13 @@ func (w *Worker) grabArticle() *html.Node {
 			switch nodeTagName {
 			case "div", "section", "header",
 				"h1", "h2", "h3", "h4", "h5", "h6":
-				if w.isElementWithoutContent(node) {
-					node = w.removeAndGetNext(node)
+				if ps.isElementWithoutContent(node) {
+					node = ps.removeAndGetNext(node)
 					continue
 				}
 			}
 
-			if indexOf(w.TagsToScore, nodeTagName) != -1 {
+			if indexOf(ps.TagsToScore, nodeTagName) != -1 {
 				elementsToScore = append(elementsToScore, node)
 			}
 
@@ -714,16 +714,16 @@ func (w *Worker) grabArticle() *html.Node {
 				childNode := node.FirstChild
 				for childNode != nil {
 					nextSibling := childNode.NextSibling
-					if w.isPhrasingContent(childNode) {
+					if ps.isPhrasingContent(childNode) {
 						if p != nil {
 							appendChild(p, childNode)
-						} else if !w.isWhitespace(childNode) {
+						} else if !ps.isWhitespace(childNode) {
 							p = createElement("p")
 							appendChild(p, cloneNode(childNode))
 							replaceNode(childNode, p)
 						}
 					} else if p != nil {
-						for p.LastChild != nil && w.isWhitespace(p.LastChild) {
+						for p.LastChild != nil && ps.isWhitespace(p.LastChild) {
 							p.RemoveChild(p.LastChild)
 						}
 						p = nil
@@ -737,17 +737,17 @@ func (w *Worker) grabArticle() *html.Node {
 				// converted into plain P elements to avoid confusing
 				// the scoring algorithm with DIVs with are, in
 				// practice, paragraphs.
-				if w.hasSingleTagInsideElement(node, "p") && w.getLinkDensity(node) < 0.25 {
+				if ps.hasSingleTagInsideElement(node, "p") && ps.getLinkDensity(node) < 0.25 {
 					newNode := children(node)[0]
 					replaceNode(node, newNode)
 					node = newNode
 					elementsToScore = append(elementsToScore, node)
-				} else if !w.hasChildBlockElement(node) {
-					w.setNodeTag(node, "p")
+				} else if !ps.hasChildBlockElement(node) {
+					ps.setNodeTag(node, "p")
 					elementsToScore = append(elementsToScore, node)
 				}
 			}
-			node = w.getNextNode(node, false)
+			node = ps.getNextNode(node, false)
 		}
 
 		// Loop through all paragraphs, and assign a score to them based
@@ -755,19 +755,19 @@ func (w *Worker) grabArticle() *html.Node {
 		// parent node. A score is determined by things like number of
 		// commas, class names, etc. Maybe eventually link density.
 		var candidates []*html.Node
-		w.forEachNode(elementsToScore, func(elementToScore *html.Node, _ int) {
+		ps.forEachNode(elementsToScore, func(elementToScore *html.Node, _ int) {
 			if elementToScore.Parent == nil || tagName(elementToScore.Parent) == "" {
 				return
 			}
 
 			// If this paragraph is less than 25 characters, don't even count it.
-			innerText := w.getInnerText(elementToScore, true)
+			innerText := ps.getInnerText(elementToScore, true)
 			if len(innerText) < 25 {
 				return
 			}
 
 			// Exclude nodes with no ancestor.
-			ancestors := w.getNodeAncestors(elementToScore, 3)
+			ancestors := ps.getNodeAncestors(elementToScore, 3)
 			if len(ancestors) == 0 {
 				return
 			}
@@ -782,13 +782,13 @@ func (w *Worker) grabArticle() *html.Node {
 			contentScore += int(math.Min(math.Floor(float64(len(innerText))/100.0), 3.0))
 
 			// Initialize and score ancestors.
-			w.forEachNode(ancestors, func(ancestor *html.Node, level int) {
+			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
 				if ancestor.Type != html.ElementNode || ancestor.Parent == nil || tagName(ancestor) == "" {
 					return
 				}
 
-				if !w.hasContentScore(ancestor) {
-					w.initializeNode(ancestor)
+				if !ps.hasContentScore(ancestor) {
+					ps.initializeNode(ancestor)
 					candidates = append(candidates, ancestor)
 				}
 
@@ -806,9 +806,9 @@ func (w *Worker) grabArticle() *html.Node {
 					scoreDivider = level * 3
 				}
 
-				ancestorScore := w.getContentScore(ancestor)
+				ancestorScore := ps.getContentScore(ancestor)
 				ancestorScore += math.Round(float64(contentScore) / float64(scoreDivider))
-				w.setContentScore(ancestor, ancestorScore)
+				ps.setContentScore(ancestor, ancestorScore)
 			})
 		})
 
@@ -824,19 +824,19 @@ func (w *Worker) grabArticle() *html.Node {
 		// less) and be mostly unaffected by this operation.
 		for i := 0; i < len(candidates); i++ {
 			candidate := candidates[i]
-			candidateScore := w.getContentScore(candidate) * (1 - w.getLinkDensity(candidate))
-			w.setContentScore(candidate, candidateScore)
+			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
+			ps.setContentScore(candidate, candidateScore)
 		}
 
 		// After we've calculated scores, sort through all of the possible
 		// candidate nodes we found and find the one with the highest score.
 		sort.Slice(candidates, func(i int, j int) bool {
-			return w.getContentScore(candidates[i]) > w.getContentScore(candidates[j])
+			return ps.getContentScore(candidates[i]) > ps.getContentScore(candidates[j])
 		})
 
 		var topCandidates []*html.Node
-		if len(candidates) > w.NTopCandidates {
-			topCandidates = candidates[:w.NTopCandidates]
+		if len(candidates) > ps.NTopCandidates {
+			topCandidates = candidates[:ps.NTopCandidates]
 		} else {
 			topCandidates = candidates
 		}
@@ -862,16 +862,16 @@ func (w *Worker) grabArticle() *html.Node {
 			}
 
 			appendChild(page, topCandidate)
-			w.initializeNode(topCandidate)
+			ps.initializeNode(topCandidate)
 		} else if topCandidate != nil {
 			// Find a better top candidate node if it contains (at least three)
 			// nodes which belong to `topCandidates` array and whose scores are
 			// quite closed with current `topCandidate` node.
-			topCandidateScore := w.getContentScore(topCandidate)
+			topCandidateScore := ps.getContentScore(topCandidate)
 			var alternativeCandidateAncestors [][]*html.Node
 			for i := 1; i < len(topCandidates); i++ {
-				if w.getContentScore(topCandidates[i])/topCandidateScore >= 0.75 {
-					topCandidateAncestors := w.getNodeAncestors(topCandidates[i], 0)
+				if ps.getContentScore(topCandidates[i])/topCandidateScore >= 0.75 {
+					topCandidateAncestors := ps.getNodeAncestors(topCandidates[i], 0)
 					alternativeCandidateAncestors = append(alternativeCandidateAncestors, topCandidateAncestors)
 				}
 			}
@@ -896,29 +896,29 @@ func (w *Worker) grabArticle() *html.Node {
 				}
 			}
 
-			if !w.hasContentScore(topCandidate) {
-				w.initializeNode(topCandidate)
+			if !ps.hasContentScore(topCandidate) {
+				ps.initializeNode(topCandidate)
 			}
 
 			// Because of our bonus system, parents of candidates might
 			// have scores themselves. They get half of the node. There
 			// won't be nodes with higher scores than our topCandidate,
-			// but if we see the score going *up* in the first few steps
+			// but if we see the score going *up* in the first few steps *
 			// up the tree, that's a decent sign that there might be more
 			// content lurking in other places that we want to unify in.
 			// The sibling stuff below does some of that - but only if
 			// we've looked high enough up the DOM tree.
 			parentOfTopCandidate = topCandidate.Parent
-			lastScore := w.getContentScore(topCandidate)
-			// The scores shouldn't get too low.
+			lastScore := ps.getContentScore(topCandidate)
+			// The scores shouldn't get too lops.
 			scoreThreshold := lastScore / 3.0
 			for parentOfTopCandidate != nil && tagName(parentOfTopCandidate) != "body" {
-				if !w.hasContentScore(parentOfTopCandidate) {
+				if !ps.hasContentScore(parentOfTopCandidate) {
 					parentOfTopCandidate = parentOfTopCandidate.Parent
 					continue
 				}
 
-				parentScore := w.getContentScore(parentOfTopCandidate)
+				parentScore := ps.getContentScore(parentOfTopCandidate)
 				if parentScore < scoreThreshold {
 					break
 				}
@@ -929,7 +929,7 @@ func (w *Worker) grabArticle() *html.Node {
 					break
 				}
 
-				lastScore = w.getContentScore(parentOfTopCandidate)
+				lastScore = ps.getContentScore(parentOfTopCandidate)
 				parentOfTopCandidate = parentOfTopCandidate.Parent
 			}
 
@@ -943,8 +943,8 @@ func (w *Worker) grabArticle() *html.Node {
 				parentOfTopCandidate = topCandidate.Parent
 			}
 
-			if !w.hasContentScore(topCandidate) {
-				w.initializeNode(topCandidate)
+			if !ps.hasContentScore(topCandidate) {
+				ps.initializeNode(topCandidate)
 			}
 		}
 
@@ -952,10 +952,10 @@ func (w *Worker) grabArticle() *html.Node {
 		// for content that might also be related. Things like preambles,
 		// content split by ads that we removed, etc.
 		articleContent := createElement("div")
-		siblingScoreThreshold := math.Max(10, w.getContentScore(topCandidate)*0.2)
+		siblingScoreThreshold := math.Max(10, ps.getContentScore(topCandidate)*0.2)
 
 		// Keep potential top candidate's parent node to try to get text direction of it later.
-		topCandidateScore := w.getContentScore(topCandidate)
+		topCandidateScore := ps.getContentScore(topCandidate)
 		topCandidateClassName := className(topCandidate)
 
 		parentOfTopCandidate = topCandidate.Parent
@@ -974,11 +974,11 @@ func (w *Worker) grabArticle() *html.Node {
 					contentBonus += topCandidateScore * 0.2
 				}
 
-				if w.hasContentScore(sibling) && w.getContentScore(sibling)+contentBonus >= siblingScoreThreshold {
+				if ps.hasContentScore(sibling) && ps.getContentScore(sibling)+contentBonus >= siblingScoreThreshold {
 					appendNode = true
 				} else if tagName(sibling) == "p" {
-					linkDensity := w.getLinkDensity(sibling)
-					nodeContent := w.getInnerText(sibling, true)
+					linkDensity := ps.getLinkDensity(sibling)
+					nodeContent := ps.getInnerText(sibling, true)
 					nodeLength := len(nodeContent)
 
 					if nodeLength > 80 && linkDensity < 0.25 {
@@ -995,7 +995,7 @@ func (w *Worker) grabArticle() *html.Node {
 				// element, like a form or td tag. Turn it into a div
 				// so it doesn't get filtered out later by accident.
 				if indexOf(alterToDivExceptions, tagName(sibling)) == -1 {
-					w.setNodeTag(sibling, "div")
+					ps.setNodeTag(sibling, "div")
 				}
 
 				appendChild(articleContent, sibling)
@@ -1004,7 +1004,7 @@ func (w *Worker) grabArticle() *html.Node {
 
 		// So we have all of the content that we need. Now we clean
 		// it up for presentation.
-		w.prepArticle(articleContent)
+		ps.prepArticle(articleContent)
 
 		if neededToCreateTopCandidate {
 			// We already created a fake div thing, and there wouldn't
@@ -1034,47 +1034,47 @@ func (w *Worker) grabArticle() *html.Node {
 		// gives us a higher likelihood of finding the content, and
 		// the sieve approach gives us a higher likelihood of
 		// finding the -right- content.
-		textLength := len(w.getInnerText(articleContent, true))
-		if textLength < w.CharThresholds {
+		textLength := len(ps.getInnerText(articleContent, true))
+		if textLength < ps.CharThresholds {
 			parseSuccessful = false
 			page = pageCache
 
-			if w.flags.stripUnlikelys {
-				w.flags.stripUnlikelys = false
-				w.attempts = append(w.attempts, parseAttempt{
+			if ps.flags.stripUnlikelys {
+				ps.flags.stripUnlikelys = false
+				ps.attempts = append(ps.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
-			} else if w.flags.useWeightClasses {
-				w.flags.useWeightClasses = false
-				w.attempts = append(w.attempts, parseAttempt{
+			} else if ps.flags.useWeightClasses {
+				ps.flags.useWeightClasses = false
+				ps.attempts = append(ps.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
-			} else if w.flags.cleanConditionally {
-				w.flags.cleanConditionally = false
-				w.attempts = append(w.attempts, parseAttempt{
+			} else if ps.flags.cleanConditionally {
+				ps.flags.cleanConditionally = false
+				ps.attempts = append(ps.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
 			} else {
-				w.attempts = append(w.attempts, parseAttempt{
+				ps.attempts = append(ps.attempts, parseAttempt{
 					articleContent: articleContent,
 					textLength:     textLength,
 				})
 
 				// No luck after removing flags, just return the
-				// longest text we found during the different loops
-				sort.Slice(w.attempts, func(i, j int) bool {
-					return w.attempts[i].textLength > w.attempts[j].textLength
+				// longest text we found during the different loops *
+				sort.Slice(ps.attempts, func(i, j int) bool {
+					return ps.attempts[i].textLength > ps.attempts[j].textLength
 				})
 
 				// But first check if we actually have something
-				if w.attempts[0].textLength == 0 {
+				if ps.attempts[0].textLength == 0 {
 					return nil
 				}
 
-				articleContent = w.attempts[0].articleContent
+				articleContent = ps.attempts[0].articleContent
 				parseSuccessful = true
 			}
 		}
@@ -1088,19 +1088,19 @@ func (w *Worker) grabArticle() *html.Node {
 // isValidByline checks whether the input string could be a byline.
 // This verifies that the input is a string, and that the length
 // is less than 100 chars.
-func (w *Worker) isValidByline(byline string) bool {
+func (ps *Parser) isValidByline(byline string) bool {
 	byline = strings.TrimSpace(byline)
 	return len(byline) > 0 && len(byline) < 100
 }
 
 // getArticleMetadata attempts to get excerpt and byline
 // metadata for the article.
-func (w *Worker) getArticleMetadata() map[string]string {
+func (ps *Parser) getArticleMetadata() map[string]string {
 	values := make(map[string]string)
-	metaElements := getElementsByTagName(w.doc, "meta")
+	metaElements := getElementsByTagName(ps.doc, "meta")
 
 	// Find description tags.
-	w.forEachNode(metaElements, func(element *html.Node, _ int) {
+	ps.forEachNode(metaElements, func(element *html.Node, _ int) {
 		elementName := getAttribute(element, "name")
 		elementProperty := getAttribute(element, "property")
 		content := getAttribute(element, "content")
@@ -1114,7 +1114,7 @@ func (w *Worker) getArticleMetadata() map[string]string {
 			matches = rxPropertyPattern.FindAllString(elementProperty, -1)
 			for i := len(matches) - 1; i >= 0; i-- {
 				// Convert to lowercase, and remove any whitespace
-				// so we can match below.
+				// so we can match belops.
 				name = strings.ToLower(matches[i])
 				name = strings.Join(strings.Fields(name), "")
 				// multiple authors
@@ -1124,7 +1124,7 @@ func (w *Worker) getArticleMetadata() map[string]string {
 
 		if len(matches) == 0 && elementName != "" && rxNamePattern.MatchString(elementName) {
 			// Convert to lowercase, remove any whitespace, and convert
-			// dots to colons so we can match below.
+			// dots to colons so we can match belops.
 			name = strings.ToLower(elementName)
 			name = strings.Join(strings.Fields(name), "")
 			name = strings.Replace(name, ".", ":", -1)
@@ -1145,7 +1145,7 @@ func (w *Worker) getArticleMetadata() map[string]string {
 	}
 
 	if metadataTitle == "" {
-		metadataTitle = w.getArticleTitle()
+		metadataTitle = ps.getArticleTitle()
 	}
 
 	// get author
@@ -1183,32 +1183,32 @@ func (w *Worker) getArticleMetadata() map[string]string {
 }
 
 // removeScripts removes script tags from the document.
-func (w *Worker) removeScripts(doc *html.Node) {
+func (ps *Parser) removeScripts(doc *html.Node) {
 	scripts := getElementsByTagName(doc, "script")
 	noScripts := getElementsByTagName(doc, "noscript")
-	w.removeNodes(scripts, nil)
-	w.removeNodes(noScripts, nil)
+	ps.removeNodes(scripts, nil)
+	ps.removeNodes(noScripts, nil)
 }
 
 // hasSingleTagInsideElement check if this node has only whitespace
 // and a single element with given tag. Returns false if the DIV node
 // contains non-empty text nodes or if it contains no element with
 // given tag or more than 1 element.
-func (w *Worker) hasSingleTagInsideElement(element *html.Node, tag string) bool {
+func (ps *Parser) hasSingleTagInsideElement(element *html.Node, tag string) bool {
 	// There should be exactly 1 element child with given tag
 	if childs := children(element); len(childs) != 1 || tagName(childs[0]) != tag {
 		return false
 	}
 
 	// And there should be no text nodes with real content
-	return !w.someNode(childNodes(element), func(node *html.Node) bool {
+	return !ps.someNode(childNodes(element), func(node *html.Node) bool {
 		return node.Type == html.TextNode && rxHasContent.MatchString(textContent(node))
 	})
 }
 
 // isElementWithoutContent determines if node is empty
 // or only fille with <br> and <hr>.
-func (w *Worker) isElementWithoutContent(node *html.Node) bool {
+func (ps *Parser) isElementWithoutContent(node *html.Node) bool {
 	brs := getElementsByTagName(node, "br")
 	hrs := getElementsByTagName(node, "hr")
 	childs := children(node)
@@ -1220,31 +1220,31 @@ func (w *Worker) isElementWithoutContent(node *html.Node) bool {
 
 // hasChildBlockElement determines whether element has any children
 // block level elements.
-func (w *Worker) hasChildBlockElement(element *html.Node) bool {
-	return w.someNode(childNodes(element), func(node *html.Node) bool {
+func (ps *Parser) hasChildBlockElement(element *html.Node) bool {
+	return ps.someNode(childNodes(element), func(node *html.Node) bool {
 		return indexOf(divToPElems, tagName(node)) != -1 ||
-			w.hasChildBlockElement(node)
+			ps.hasChildBlockElement(node)
 	})
 }
 
 // isPhrasingContent determines if a node qualifies as phrasing content.
-func (w *Worker) isPhrasingContent(node *html.Node) bool {
+func (ps *Parser) isPhrasingContent(node *html.Node) bool {
 	nodeTagName := tagName(node)
 	return node.Type == html.TextNode || indexOf(phrasingElems, nodeTagName) != -1 ||
 		((nodeTagName == "a" || nodeTagName == "del" || nodeTagName == "ins") &&
-			w.everyNode(childNodes(node), w.isPhrasingContent))
+			ps.everyNode(childNodes(node), ps.isPhrasingContent))
 }
 
 // isWhitespace determines if a node only used as whitespace.
-func (w *Worker) isWhitespace(node *html.Node) bool {
+func (ps *Parser) isWhitespace(node *html.Node) bool {
 	return (node.Type == html.TextNode && strings.TrimSpace(textContent(node)) == "") ||
 		(node.Type == html.ElementNode && tagName(node) == "br")
 }
 
 // getInnerText gets the inner text of a node.
-// This also strips out any excess whitespace to be found.
+// This also strips * out any excess whitespace to be found.
 // In Readability.js, normalizeSpaces default to true.
-func (w *Worker) getInnerText(node *html.Node, normalizeSpaces bool) string {
+func (ps *Parser) getInnerText(node *html.Node, normalizeSpaces bool) string {
 	textContent := strings.TrimSpace(textContent(node))
 	if normalizeSpaces {
 		textContent = rxNormalize.ReplaceAllString(textContent, " ")
@@ -1254,13 +1254,13 @@ func (w *Worker) getInnerText(node *html.Node, normalizeSpaces bool) string {
 
 // getCharCount returns the number of times a string s
 // appears in the node.
-func (w *Worker) getCharCount(node *html.Node, s string) int {
-	innerText := w.getInnerText(node, true)
+func (ps *Parser) getCharCount(node *html.Node, s string) int {
+	innerText := ps.getInnerText(node, true)
 	return strings.Count(innerText, s)
 }
 
 // cleanStyles removes the style attribute on every node and under.
-func (w *Worker) cleanStyles(node *html.Node) {
+func (ps *Parser) cleanStyles(node *html.Node) {
 	nodeTagName := tagName(node)
 	if node == nil || nodeTagName == "svg" {
 		return
@@ -1277,22 +1277,22 @@ func (w *Worker) cleanStyles(node *html.Node) {
 	}
 
 	for child := firstElementChild(node); child != nil; child = nextElementSibling(child) {
-		w.cleanStyles(child)
+		ps.cleanStyles(child)
 	}
 }
 
 // getLinkDensity gets the density of links as a percentage of the
 // content. This is the amount of text that is inside a link divided
 // by the total text in the node.
-func (w *Worker) getLinkDensity(element *html.Node) float64 {
-	textLength := len(w.getInnerText(element, true))
+func (ps *Parser) getLinkDensity(element *html.Node) float64 {
+	textLength := len(ps.getInnerText(element, true))
 	if textLength == 0 {
 		return 0
 	}
 
 	linkLength := 0
-	w.forEachNode(getElementsByTagName(element, "a"), func(linkNode *html.Node, _ int) {
-		linkLength += len(w.getInnerText(linkNode, true))
+	ps.forEachNode(getElementsByTagName(element, "a"), func(linkNode *html.Node, _ int) {
+		linkLength += len(ps.getInnerText(linkNode, true))
 	})
 
 	return float64(linkLength) / float64(textLength)
@@ -1300,8 +1300,8 @@ func (w *Worker) getLinkDensity(element *html.Node) float64 {
 
 // getClassWeight gets an elements class/id weight. Uses regular
 // expressions to tell if this element looks good or bad.
-func (w *Worker) getClassWeight(node *html.Node) int {
-	if !w.flags.useWeightClasses {
+func (ps *Parser) getClassWeight(node *html.Node) int {
+	if !ps.flags.useWeightClasses {
 		return 0
 	}
 
@@ -1334,10 +1334,10 @@ func (w *Worker) getClassWeight(node *html.Node) int {
 
 // clean cleans a node of all elements of type "tag".
 // (Unless it's a youtube/vimeo video. People love movies.)
-func (w *Worker) clean(node *html.Node, tag string) {
+func (ps *Parser) clean(node *html.Node, tag string) {
 	isEmbed := indexOf([]string{"object", "embed", "iframe"}, tag) != -1
 
-	w.removeNodes(getElementsByTagName(node, tag), func(element *html.Node) bool {
+	ps.removeNodes(getElementsByTagName(node, tag), func(element *html.Node) bool {
 		// Allow youtube and vimeo videos through as people usually want to see those.
 		if isEmbed {
 			attributeValues := make([]string, len(element.Attr))
@@ -1364,7 +1364,7 @@ func (w *Worker) clean(node *html.Node, tag string) {
 // hasAncestorTag checks if a given node has one of its ancestor tag
 // name matching the provided one. In Readability.js, default value
 // for maxDepth is 3.
-func (w *Worker) hasAncestorTag(node *html.Node, tag string, maxDepth int, filterFn func(*html.Node) bool) bool {
+func (ps *Parser) hasAncestorTag(node *html.Node, tag string, maxDepth int, filterFn func(*html.Node) bool) bool {
 	depth := 0
 	for node.Parent != nil {
 		if maxDepth > 0 && depth > maxDepth {
@@ -1382,7 +1382,7 @@ func (w *Worker) hasAncestorTag(node *html.Node, tag string, maxDepth int, filte
 }
 
 // getRowAndColumnCount returns how many rows and columns this table has.
-func (w *Worker) getRowAndColumnCount(table *html.Node) (int, int) {
+func (ps *Parser) getRowAndColumnCount(table *html.Node) (int, int) {
 	rows := 0
 	columns := 0
 	trs := getElementsByTagName(table, "tr")
@@ -1416,31 +1416,31 @@ func (w *Worker) getRowAndColumnCount(table *html.Node) (int, int) {
 
 // markDataTables looks for 'data' (as opposed to 'layout') tables
 // and mark it.
-func (w *Worker) markDataTables(root *html.Node) {
+func (ps *Parser) markDataTables(root *html.Node) {
 	tables := getElementsByTagName(root, "table")
 	for i := 0; i < len(tables); i++ {
 		table := tables[i]
 
 		role := getAttribute(table, "role")
 		if role == "presentation" {
-			w.setReadabilityDataTable(table, false)
+			ps.setReadabilityDataTable(table, false)
 			continue
 		}
 
 		datatable := getAttribute(table, "datatable")
 		if datatable == "0" {
-			w.setReadabilityDataTable(table, false)
+			ps.setReadabilityDataTable(table, false)
 			continue
 		}
 
 		if hasAttribute(table, "summary") {
-			w.setReadabilityDataTable(table, true)
+			ps.setReadabilityDataTable(table, true)
 			continue
 		}
 
 		if captions := getElementsByTagName(table, "caption"); len(captions) > 0 {
 			if caption := captions[0]; caption != nil && len(childNodes(caption)) > 0 {
-				w.setReadabilityDataTable(table, true)
+				ps.setReadabilityDataTable(table, true)
 				continue
 			}
 		}
@@ -1456,25 +1456,25 @@ func (w *Worker) markDataTables(root *html.Node) {
 		}
 
 		if hasDataTableDescendantTags {
-			w.setReadabilityDataTable(table, true)
+			ps.setReadabilityDataTable(table, true)
 			continue
 		}
 
 		// Nested tables indicates a layout table:
 		if len(getElementsByTagName(table, "table")) > 0 {
-			w.setReadabilityDataTable(table, false)
+			ps.setReadabilityDataTable(table, false)
 			continue
 		}
 
-		rows, columns := w.getRowAndColumnCount(table)
+		rows, columns := ps.getRowAndColumnCount(table)
 		if rows >= 10 || columns > 4 {
-			w.setReadabilityDataTable(table, true)
+			ps.setReadabilityDataTable(table, true)
 			continue
 		}
 
 		// Now just go by size entirely:
 		if rows*columns > 10 {
-			w.setReadabilityDataTable(table, true)
+			ps.setReadabilityDataTable(table, true)
 		}
 	}
 }
@@ -1482,8 +1482,8 @@ func (w *Worker) markDataTables(root *html.Node) {
 // cleanConditionally cleans an element of all tags of type "tag" if
 // they look fishy. "Fishy" is an algorithm based on content length,
 // classnames, link density, number of images & embeds, etc.
-func (w *Worker) cleanConditionally(element *html.Node, tag string) {
-	if !w.flags.cleanConditionally {
+func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
+	if !ps.flags.cleanConditionally {
 		return
 	}
 
@@ -1492,17 +1492,17 @@ func (w *Worker) cleanConditionally(element *html.Node, tag string) {
 	// Gather counts for other typical elements embedded within.
 	// Traverse backwards so we can remove nodes at the same time
 	// without effecting the traversal.
-	w.removeNodes(getElementsByTagName(element, tag), func(node *html.Node) bool {
-		if w.hasAncestorTag(node, "table", -1, w.isReadabilityDataTable) {
+	ps.removeNodes(getElementsByTagName(element, tag), func(node *html.Node) bool {
+		if ps.hasAncestorTag(node, "table", -1, ps.isReadabilityDataTable) {
 			return false
 		}
 
-		weight := w.getClassWeight(node)
+		weight := ps.getClassWeight(node)
 		if weight < 0 {
 			return true
 		}
 
-		if w.getCharCount(node, ",") < 10 {
+		if ps.getCharCount(node, ",") < 10 {
 			// If there are not very many commas, and the number of
 			// non-paragraph elements is more than paragraphs or other
 			// ominous signs, remove the element.
@@ -1520,13 +1520,13 @@ func (w *Worker) cleanConditionally(element *html.Node, tag string) {
 				}
 			}
 
-			linkDensity := w.getLinkDensity(node)
-			contentLength := len(w.getInnerText(node, true))
+			linkDensity := ps.getLinkDensity(node)
+			contentLength := len(ps.getInnerText(node, true))
 
-			return (img > 1 && p/img < 0.5 && !w.hasAncestorTag(node, "figure", 3, nil)) ||
+			return (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && li > p) ||
 				(input > math.Floor(p/3)) ||
-				(!isList && contentLength < 25 && (img == 0 || img > 2) && !w.hasAncestorTag(node, "figure", 3, nil)) ||
+				(!isList && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
 				((embedCount == 1 && contentLength < 75) || embedCount > 1)
@@ -1538,31 +1538,31 @@ func (w *Worker) cleanConditionally(element *html.Node, tag string) {
 
 // cleanMatchedNodes cleans out elements whose id/class
 // combinations match specific string.
-func (w *Worker) cleanMatchedNodes(e *html.Node, regex *regexp.Regexp) {
-	endOfSearchMarkerNode := w.getNextNode(e, true)
-	next := w.getNextNode(e, false)
+func (ps *Parser) cleanMatchedNodes(e *html.Node, regex *regexp.Regexp) {
+	endOfSearchMarkerNode := ps.getNextNode(e, true)
+	next := ps.getNextNode(e, false)
 	for next != nil && next != endOfSearchMarkerNode {
 		if regex.MatchString(className(next) + " " + id(next)) {
-			next = w.removeAndGetNext(next)
+			next = ps.removeAndGetNext(next)
 		} else {
-			next = w.getNextNode(next, false)
+			next = ps.getNextNode(next, false)
 		}
 	}
 }
 
 // cleanHeaders cleans out spurious headers from an Element.
 // Checks things like classnames and link density.
-func (w *Worker) cleanHeaders(e *html.Node) {
+func (ps *Parser) cleanHeaders(e *html.Node) {
 	for headerIndex := 1; headerIndex < 3; headerIndex++ {
 		headerTag := fmt.Sprintf("h%d", headerIndex)
-		w.removeNodes(getElementsByTagName(e, headerTag), func(header *html.Node) bool {
-			return w.getClassWeight(header) < 0
+		ps.removeNodes(getElementsByTagName(e, headerTag), func(header *html.Node) bool {
+			return ps.getClassWeight(header) < 0
 		})
 	}
 }
 
 // isProbablyVisible determines if a node is visible.
-func (w *Worker) isProbablyVisible(node *html.Node) bool {
+func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 	nodeStyle := getAttribute(node, "style")
 	return (nodeStyle == "" || !rxDisplayNone.MatchString(nodeStyle)) && !hasAttribute(node, "hidden")
 }
@@ -1574,14 +1574,14 @@ func (w *Worker) isProbablyVisible(node *html.Node) bool {
 // 3. Grab the article content from the current dom tree.
 // 4. Replace the current DOM tree with the new one.
 // 5. Read peacefully.
-func (w *Worker) Parse(input io.Reader, pageURL string) (Article, error) {
-	// Reset worker data
-	w.articleTitle = ""
-	w.articleByline = ""
-	w.articleDir = ""
-	w.articleSiteName = ""
-	w.attempts = []parseAttempt{}
-	w.flags = flags{
+func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
+	// Reset parser data
+	ps.articleTitle = ""
+	ps.articleByline = ""
+	ps.articleDir = ""
+	ps.articleSiteName = ""
+	ps.attempts = []parseAttempt{}
+	ps.flags = flags{
 		stripUnlikelys:     true,
 		useWeightClasses:   true,
 		cleanConditionally: true,
@@ -1589,39 +1589,39 @@ func (w *Worker) Parse(input io.Reader, pageURL string) (Article, error) {
 
 	// Parse page url
 	var err error
-	w.documentURI, err = nurl.ParseRequestURI(pageURL)
+	ps.documentURI, err = nurl.ParseRequestURI(pageURL)
 	if err != nil {
 		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
 	}
 
 	// Parse input
-	w.doc, err = html.Parse(input)
+	ps.doc, err = html.Parse(input)
 	if err != nil {
 		return Article{}, fmt.Errorf("failed to parse input: %v", err)
 	}
 
 	// Avoid parsing too large documents, as per configuration option
-	if w.MaxElemsToParse > 0 {
-		numTags := len(getElementsByTagName(w.doc, "*"))
-		if numTags > w.MaxElemsToParse {
+	if ps.MaxElemsToParse > 0 {
+		numTags := len(getElementsByTagName(ps.doc, "*"))
+		if numTags > ps.MaxElemsToParse {
 			return Article{}, fmt.Errorf("documents too large: %d elements", numTags)
 		}
 	}
 
 	// Remove script tags from the document.
-	w.removeScripts(w.doc)
+	ps.removeScripts(ps.doc)
 
-	w.prepDocument()
+	ps.prepDocument()
 
-	metadata := w.getArticleMetadata()
-	w.articleTitle = metadata["title"]
+	metadata := ps.getArticleMetadata()
+	ps.articleTitle = metadata["title"]
 
-	articleContent := w.grabArticle()
+	articleContent := ps.grabArticle()
 	if articleContent == nil {
 		return Article{}, fmt.Errorf("unable to find readable content")
 	}
 
-	w.postProcessContent(articleContent)
+	ps.postProcessContent(articleContent)
 
 	// If we haven't found an excerpt in the article's metadata,
 	// use the article's first paragraph as the excerpt. This is used
@@ -1640,11 +1640,11 @@ func (w *Worker) Parse(input io.Reader, pageURL string) (Article, error) {
 
 	finalByline := metadata["byline"]
 	if finalByline == "" {
-		finalByline = w.articleByline
+		finalByline = ps.articleByline
 	}
 
 	return Article{
-		Title:       w.articleTitle,
+		Title:       ps.articleTitle,
 		Byline:      finalByline,
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
@@ -1657,7 +1657,7 @@ func (w *Worker) Parse(input io.Reader, pageURL string) (Article, error) {
 // IsReadable decides whether or not the document is reader-able
 // without parsing the whole thing. In `mozilla/readability`,
 // this method is located in `Readability-readable.js`.
-func (w *Worker) IsReadable(input io.Reader) bool {
+func (ps *Parser) IsReadable(input io.Reader) bool {
 	// Parse input
 	doc, err := html.Parse(input)
 	if err != nil {
@@ -1707,8 +1707,8 @@ func (w *Worker) IsReadable(input io.Reader) bool {
 	// This is a little cheeky, we use the accumulator 'score'
 	// to decide what to return from this callback.
 	score := float64(0)
-	return w.someNode(nodeList, func(node *html.Node) bool {
-		if !w.isProbablyVisible(node) {
+	return ps.someNode(nodeList, func(node *html.Node) bool {
+		if !ps.isProbablyVisible(node) {
 			return false
 		}
 
@@ -1718,7 +1718,7 @@ func (w *Worker) IsReadable(input io.Reader) bool {
 			return false
 		}
 
-		if tagName(node) == "p" && w.hasAncestorTag(node, "li", -1, nil) {
+		if tagName(node) == "p" && ps.hasAncestorTag(node, "li", -1, nil) {
 			return false
 		}
 
@@ -1752,7 +1752,7 @@ func (w *Worker) IsReadable(input io.Reader) bool {
 // HTML nodes. Hence why these methods exists.
 
 // setReadabilityDataTable marks whether a Node is data table or not.
-func (w *Worker) setReadabilityDataTable(node *html.Node, isDataTable bool) {
+func (ps *Parser) setReadabilityDataTable(node *html.Node, isDataTable bool) {
 	if isDataTable {
 		setAttribute(node, "data-readability-table", "true")
 	} else {
@@ -1761,22 +1761,22 @@ func (w *Worker) setReadabilityDataTable(node *html.Node, isDataTable bool) {
 }
 
 // isReadabilityDataTable determines if node is data table.
-func (w *Worker) isReadabilityDataTable(node *html.Node) bool {
+func (ps *Parser) isReadabilityDataTable(node *html.Node) bool {
 	return hasAttribute(node, "data-readability-table")
 }
 
 // setContentScore sets the readability score for a node.
-func (w *Worker) setContentScore(node *html.Node, score float64) {
+func (ps *Parser) setContentScore(node *html.Node, score float64) {
 	setAttribute(node, "data-readability-score", fmt.Sprintf("%.3f", score))
 }
 
 // hasContentScore checks if node has readability score.
-func (w *Worker) hasContentScore(node *html.Node) bool {
+func (ps *Parser) hasContentScore(node *html.Node) bool {
 	return hasAttribute(node, "data-readability-score")
 }
 
 // getContentScore gets the readability score of a node.
-func (w *Worker) getContentScore(node *html.Node) float64 {
+func (ps *Parser) getContentScore(node *html.Node) float64 {
 	strScore := getAttribute(node, "data-readability-score")
 	strScore = strings.TrimSpace(strScore)
 	if strScore == "" {
@@ -1789,11 +1789,11 @@ func (w *Worker) getContentScore(node *html.Node) float64 {
 
 // clearReadabilityAttr removes Readability attribute that
 // created by this package. Used in `postProcessContent`.
-func (w *Worker) clearReadabilityAttr(node *html.Node) {
+func (ps *Parser) clearReadabilityAttr(node *html.Node) {
 	removeAttribute(node, "data-readability-score")
 	removeAttribute(node, "data-readability-table")
 
 	for child := firstElementChild(node); child != nil; child = nextElementSibling(child) {
-		w.clearReadabilityAttr(child)
+		ps.clearReadabilityAttr(child)
 	}
 }
