@@ -615,7 +615,9 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	}
 
 	rel := getAttribute(node, "rel")
-	if (rel == "author" || rxByline.MatchString(matchString)) && ps.isValidByline(textContent(node)) {
+	itemprop := getAttribute(node, "itemprop")
+	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) &&
+		ps.isValidByline(textContent(node)) {
 		ps.articleByline = strings.TrimSpace(textContent(node))
 		return true
 	}
