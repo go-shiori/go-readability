@@ -39,6 +39,7 @@ var (
 	rxDisplayNone          = regexp.MustCompile(`(?i)display\s*:\s*none`)
 	rxSentencePeriod       = regexp.MustCompile(`(?i)\.( |$)`)
 	rxShare                = regexp.MustCompile(`(?i)share`)
+	rxFaviconSize          = regexp.MustCompile(`(?i)(\d+)x(\d+)`)
 )
 
 // Constants that used by readability.
@@ -78,6 +79,7 @@ type Article struct {
 	Excerpt     string
 	SiteName    string
 	Image       string
+	Favicon     string
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1621,6 +1623,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 
 	ps.prepDocument()
 
+	favicon := ps.getArticleFavicon()
 	metadata := ps.getArticleMetadata()
 	ps.articleTitle = metadata["title"]
 
@@ -1660,6 +1663,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		Excerpt:     metadata["excerpt"],
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
+		Favicon:     favicon,
 	}, nil
 }
 
@@ -1747,7 +1751,51 @@ func (ps *Parser) IsReadable(input io.Reader) bool {
 }
 
 // Methods below these point are not exist in Readability.js.
-// In dynamic language lika JavaScript, we can easily add new
+
+// getArticleFavicon attempts to get high quality favicon
+// that used in article. It will only pick favicon in PNG
+// format, so small favicon that uses ico file won't be picked.
+// Using algorithm by philippe_b.
+func (ps *Parser) getArticleFavicon() string {
+	favicon := ""
+	faviconSize := -1
+	linkElements := getElementsByTagName(ps.doc, "link")
+
+	ps.forEachNode(linkElements, func(link *html.Node, _ int) {
+		linkRel := strings.TrimSpace(getAttribute(link, "rel"))
+		linkType := strings.TrimSpace(getAttribute(link, "type"))
+		linkHref := strings.TrimSpace(getAttribute(link, "href"))
+		linkSizes := strings.TrimSpace(getAttribute(link, "sizes"))
+
+		if linkHref == "" || !strings.Contains(linkRel, "icon") {
+			return
+		}
+
+		if linkType != "image/png" && !strings.Contains(linkHref, ".png") {
+			return
+		}
+
+		size := 0
+		for _, sizesLocation := range []string{linkSizes, linkHref} {
+			sizeParts := rxFaviconSize.FindStringSubmatch(sizesLocation)
+			if len(sizeParts) != 3 || sizeParts[1] != sizeParts[2] {
+				continue
+			}
+
+			size, _ = strconv.Atoi(sizeParts[1])
+			break
+		}
+
+		if size > faviconSize {
+			faviconSize = size
+			favicon = linkHref
+		}
+	})
+
+	return toAbsoluteURI(favicon, ps.documentURI)
+}
+
+// In dynamic language like JavaScript, we can easily add new
 // property to an existing object by simply writing :
 //
 //   obj.newProperty = newValue
