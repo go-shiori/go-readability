@@ -24,7 +24,10 @@ func getElementsByTagName(doc *html.Node, tagName string) []*html.Node {
 		}
 	}
 
-	finder(doc)
+	for child := doc.FirstChild; child != nil; child = child.NextSibling {
+		finder(child)
+	}
+
 	return results
 }
 
@@ -39,7 +42,7 @@ func createElement(tagName string) *html.Node {
 // createTextNode creates a new Text node.
 func createTextNode(data string) *html.Node {
 	return &html.Node{
-		Type: html.ElementNode,
+		Type: html.TextNode,
 		Data: data,
 	}
 }

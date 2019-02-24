@@ -24,7 +24,7 @@ func Test_indexOf(t *testing.T) {
 			t.Errorf("\n"+
 				"word : \"%s\"\n"+
 				"want : %d\n"+
-				"got  : %d\n", word, expected, idx)
+				"got  : %d", word, expected, idx)
 		}
 	}
 }
@@ -41,7 +41,7 @@ func Test_wordCount(t *testing.T) {
 			t.Errorf("\n"+
 				"sentence : \"%s\"\n"+
 				"want     : %d\n"+
-				"got      : %d\n", sentence, expected, count)
+				"got      : %d", sentence, expected, count)
 		}
 	}
 }
