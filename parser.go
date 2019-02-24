@@ -29,8 +29,8 @@ var (
 	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
-	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name)\s*`)
-	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name)\s*$`)
+	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name|image\S*)\s*`)
+	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
 	rxTitleHierarchySep    = regexp.MustCompile(`(?i) [\\/>»] `)
 	rxTitleRemoveFinalPart = regexp.MustCompile(`(?i)(.*)[\|\-\\/>»] .*`)
@@ -77,6 +77,7 @@ type Article struct {
 	Length      int
 	Excerpt     string
 	SiteName    string
+	Image       string
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1176,11 +1177,22 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// get site name
 	metadataSiteName := values["og:site_name"]
 
+	// get image thumbnail
+	metadataImage := ""
+	possibleAttrNames = []string{"og:image", "image", "twitter:image"}
+	for _, name := range possibleAttrNames {
+		if value, ok := values[name]; ok {
+			metadataImage = toAbsoluteURI(value, ps.documentURI)
+			break
+		}
+	}
+
 	return map[string]string{
 		"title":    metadataTitle,
 		"byline":   metadataByline,
 		"excerpt":  metadataExcerpt,
 		"siteName": metadataSiteName,
+		"image":    metadataImage,
 	}
 }
 
@@ -1647,6 +1659,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		Length:      len(finalTextContent),
 		Excerpt:     metadata["excerpt"],
 		SiteName:    metadata["siteName"],
+		Image:       metadata["image"],
 	}, nil
 }
 
