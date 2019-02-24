@@ -109,8 +109,7 @@ func Test_tagName(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if nodeTag := tagName(node); nodeTag != expected {
@@ -140,8 +139,7 @@ func Test_getAttribute(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if attrValue := getAttribute(node, "data-test"); attrValue != expected {
@@ -217,8 +215,7 @@ func Test_removeAttribute(t *testing.T) {
 				"failed to parse: %v", test.origin, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		removeAttribute(node, test.removedAttr)
@@ -251,13 +248,10 @@ func Test_hasAttribute(t *testing.T) {
 
 	doc, err := html.Parse(strings.NewReader(origin))
 	if err != nil {
-		t.Errorf("\n"+
-			"HTML : \"%s\"\n"+
-			"failed to parse: %v", origin, err)
+		t.Errorf("\nfailed to parse HTML: %v", err)
 	}
 
-	html := doc.FirstChild
-	body := html.FirstChild.NextSibling
+	body := getElementsByTagName(doc, "body")[0]
 	node := body.FirstChild
 
 	for attrName, expected := range scenarios {
@@ -289,8 +283,7 @@ func Test_textContent(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if text := textContent(node); text != expected {
@@ -319,8 +312,7 @@ func Test_outerHTML(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if outer := outerHTML(node); outer != strHTML {
@@ -348,8 +340,7 @@ func Test_innerHTML(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if inner := innerHTML(node); inner != expected {
@@ -387,8 +378,7 @@ func Test_id(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if nodeID := id(node); nodeID != expected {
@@ -417,8 +407,7 @@ func Test_class(t *testing.T) {
 				"failed to parse: %v", strHTML, err)
 		}
 
-		html := doc.FirstChild
-		body := html.FirstChild.NextSibling
+		body := getElementsByTagName(doc, "body")[0]
 		node := body.FirstChild
 
 		if nodeClass := className(node); nodeClass != expected {
@@ -436,11 +425,10 @@ func Test_children(t *testing.T) {
 		t.Error(err)
 	}
 
-	html := doc.FirstChild
-	body := html.FirstChild.NextSibling
+	body := getElementsByTagName(doc, "body")[0]
+	nChildElements := len(children(body))
 
 	expected := 30
-	nChildElements := len(children(body))
 	if nChildElements != expected {
 		t.Errorf("\n"+
 			"failed to get all children element\n"+
@@ -455,15 +443,210 @@ func Test_childNodes(t *testing.T) {
 		t.Error(err)
 	}
 
-	html := doc.FirstChild
-	body := html.FirstChild.NextSibling
+	body := getElementsByTagName(doc, "body")[0]
+	nChildNodes := len(childNodes(body))
 
 	expected := 61
-	nChildNodes := len(childNodes(body))
 	if nChildNodes != expected {
 		t.Errorf("\n"+
 			"failed to get all child nodes\n"+
 			"want : %d\n"+
 			"got  : %d", expected, nChildNodes)
+	}
+}
+
+func Test_firstElementChild(t *testing.T) {
+	origin := `<div>
+		Hi, this is a TextNode.
+		<p>This is HTML element p.</p>
+		Somehow there are another TextNode here.
+		<ul><li>Which followed by list here.</li></ul>
+	</div>`
+
+	doc, err := html.Parse(strings.NewReader(origin))
+	if err != nil {
+		if err != nil {
+			t.Errorf("\nfailed to parse HTML: %v", err)
+		}
+	}
+
+	div := getElementsByTagName(doc, "div")[0]
+	firstElement := firstElementChild(div)
+
+	expected := "<p>This is HTML element p.</p>"
+	if outer := outerHTML(firstElement); outer != expected {
+		t.Errorf("\n"+
+			"failed to get first element child\n"+
+			"want : \"%s\"\n"+
+			"got  : \"%s\"", expected, outer)
+	}
+}
+
+func Test_nextElementSibling(t *testing.T) {
+	origin := `<div>
+		Hi, this is a TextNode.
+		<p>This is HTML element p.</p>
+		Somehow there are another TextNode here.
+		<ul><li>Which followed by list here.</li></ul>
+	</div>`
+
+	doc, err := html.Parse(strings.NewReader(origin))
+	if err != nil {
+		if err != nil {
+			t.Errorf("\nfailed to parse HTML: %v", err)
+		}
+	}
+
+	div := getElementsByTagName(doc, "div")[0]
+	firstElement := firstElementChild(div)
+	sibling := nextElementSibling(firstElement)
+
+	expected := "<ul><li>Which followed by list here.</li></ul>"
+	if outer := outerHTML(sibling); outer != expected {
+		t.Errorf("\n"+
+			"failed to get next element sibling\n"+
+			"want : \"%s\"\n"+
+			"got  : \"%s\"", expected, outer)
+	}
+}
+
+func Test_appendChild_fromNew(t *testing.T) {
+	origin := `<div><p>This is a div with one lonely p.</p></div>`
+
+	doc, err := html.Parse(strings.NewReader(origin))
+	if err != nil {
+		if err != nil {
+			t.Errorf("\nfailed to parse HTML: %v", err)
+		}
+	}
+
+	div := getElementsByTagName(doc, "div")[0]
+	newImg := createElement("img")
+	appendChild(div, newImg)
+
+	expected := `<div><p>This is a div with one lonely p.</p><img/></div>`
+	if outer := outerHTML(div); outer != expected {
+		t.Errorf("\n"+
+			"failed to append child from new element\n"+
+			"want : \"%s\"\n"+
+			"got  : \"%s\"", expected, outer)
+	}
+}
+
+func Test_appendChild_fromExisting(t *testing.T) {
+	origin := `<div><div></div><p>One div-less p</p></div>`
+
+	doc, err := html.Parse(strings.NewReader(origin))
+	if err != nil {
+		if err != nil {
+			t.Errorf("\nfailed to parse HTML: %v", err)
+		}
+	}
+
+	outerDiv := getElementsByTagName(doc, "div")[0]
+	div := getElementsByTagName(doc, "div")[1]
+	p := getElementsByTagName(doc, "p")[0]
+	appendChild(div, p)
+
+	expected := `<div><div><p>One div-less p</p></div></div>`
+	if outer := outerHTML(outerDiv); outer != expected {
+		t.Errorf("\n"+
+			"failed to append child from existing element\n"+
+			"want : \"%s\"\n"+
+			"got  : \"%s\"", expected, outer)
+	}
+}
+
+func Test_replaceNode(t *testing.T) {
+	origin := `<p>Paragraph with one thousand words</p>`
+
+	doc, err := html.Parse(strings.NewReader(origin))
+	if err != nil {
+		if err != nil {
+			t.Errorf("\nfailed to parse HTML: %v", err)
+		}
+	}
+
+	body := getElementsByTagName(doc, "body")[0]
+	p := getElementsByTagName(doc, "p")[0]
+	img := createElement("img")
+	replaceNode(p, img)
+
+	expected := `<img/>`
+	if html := innerHTML(body); html != expected {
+		t.Errorf("\n"+
+			"failed to replace node\n"+
+			"want : \"%s\"\n"+
+			"got  : \"%s\"", expected, html)
+	}
+}
+
+func Test_includeNode(t *testing.T) {
+	doc, err := openTestFile("test-pages/nodes.html")
+	if err != nil {
+		t.Error(err)
+	}
+
+	body := getElementsByTagName(doc, "body")[0]
+	allElements := getElementsByTagName(body, "*")
+
+	scenarios := map[*html.Node]bool{
+		getElementsByTagName(body, "h1")[0]:  true,
+		getElementsByTagName(body, "h2")[0]:  true,
+		getElementsByTagName(body, "h3")[0]:  true,
+		getElementsByTagName(body, "p")[0]:   true,
+		getElementsByTagName(body, "div")[0]: true,
+		getElementsByTagName(body, "img")[0]: true,
+		createElement("h4"):                  false,
+		createElement("h5"):                  false,
+		createElement("ul"):                  false,
+		createElement("pre"):                 false,
+		createElement("table"):               false,
+	}
+
+	for node, expected := range scenarios {
+		if isIncluded := includeNode(allElements, node); isIncluded != expected {
+			t.Errorf("\n"+
+				"element : \"%s\"\n"+
+				"want    : %t\n"+
+				"got     : %t", tagName(node), expected, isIncluded)
+		}
+	}
+}
+
+func Test_cloneNode(t *testing.T) {
+	scenarios := []string{
+		`<p>Hello world</p>`,
+		`<p>This has <b>bold</b> content</p>`,
+		`<img src="cute-cat.jpg"/>`,
+		`<div><div><p></p></div><div></div></div>`,
+	}
+
+	for _, strHTML := range scenarios {
+		doc, err := html.Parse(strings.NewReader(strHTML))
+		if err != nil {
+			t.Errorf("\n"+
+				"HTML : \"%s\"\n"+
+				"failed to parse: %v", strHTML, err)
+		}
+
+		body := getElementsByTagName(doc, "body")[0]
+		node := body.FirstChild
+		clone := cloneNode(node)
+
+		nodeHTML := outerHTML(node)
+		cloneHTML := outerHTML(clone)
+
+		// Make sure two node is same, but has different pointer
+		if nodeHTML != cloneHTML || node == clone {
+			t.Errorf("\n"+
+				"failed to be cloned properly\n"+
+				"origin     : \"%s\"\n"+
+				"node HTML  : \"%s\"\n"+
+				"clone HTML : \"%s\"\n"+
+				"node addr  : %p\n"+
+				"clone addr : %p",
+				strHTML, nodeHTML, cloneHTML, node, clone)
+		}
 	}
 }
