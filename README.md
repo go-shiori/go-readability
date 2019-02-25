@@ -1,5 +1,5 @@
 Go-Readability
----
+===
 
 [![GoDoc](https://godoc.org/github.com/go-shiori/go-readability?status.png)](https://godoc.org/github.com/go-shiori/go-readability)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-shiori/go-readability)](https://goreportcard.com/report/github.com/go-shiori/go-readability)
