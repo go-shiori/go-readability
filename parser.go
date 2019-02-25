@@ -1512,6 +1512,10 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 	// Traverse backwards so we can remove nodes at the same time
 	// without effecting the traversal.
 	ps.removeNodes(getElementsByTagName(element, tag), func(node *html.Node) bool {
+		if tag == "table" && ps.isReadabilityDataTable(node) {
+			return false
+		}
+
 		if ps.hasAncestorTag(node, "table", -1, ps.isReadabilityDataTable) {
 			return false
 		}
