@@ -650,20 +650,19 @@ func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // element types), find the content that is most likely to be the
 // stuff a user wants to read. Then return it wrapped up in a div.
 func (ps *Parser) grabArticle() *html.Node {
-	doc := ps.doc
-
-	var page *html.Node
-	if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 {
-		page = nodes[0]
-	}
-
-	// We can't grab an article if we don't have a page!
-	if page == nil {
-		return nil
-	}
-
-	pageCache := cloneNode(page)
 	for {
+		doc := cloneNode(ps.doc)
+
+		var page *html.Node
+		if nodes := getElementsByTagName(doc, "body"); len(nodes) > 0 {
+			page = nodes[0]
+		}
+
+		// We can't grab an article if we don't have a page!
+		if page == nil {
+			return nil
+		}
+
 		// First, node prepping. Trash nodes that look cruddy (like ones
 		// with the class name "comment", etc), and turn divs into P
 		// tags where they have been used inappropriately (as in, where
@@ -1043,7 +1042,6 @@ func (ps *Parser) grabArticle() *html.Node {
 		textLength := len(ps.getInnerText(articleContent, true))
 		if textLength < ps.CharThresholds {
 			parseSuccessful = false
-			page = pageCache
 
 			if ps.flags.stripUnlikelys {
 				ps.flags.stripUnlikelys = false
