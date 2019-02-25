@@ -788,7 +788,7 @@ func (ps *Parser) grabArticle() *html.Node {
 
 			// Initialize and score ancestors.
 			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
-				if ancestor.Type != html.ElementNode || ancestor.Parent == nil || tagName(ancestor) == "" {
+				if tagName(ancestor) == "" || ancestor.Parent == nil || ancestor.Parent.Type != html.ElementNode {
 					return
 				}
 
@@ -812,7 +812,7 @@ func (ps *Parser) grabArticle() *html.Node {
 				}
 
 				ancestorScore := ps.getContentScore(ancestor)
-				ancestorScore += math.Round(float64(contentScore) / float64(scoreDivider))
+				ancestorScore += float64(contentScore) / float64(scoreDivider)
 				ps.setContentScore(ancestor, ancestorScore)
 			})
 		})
@@ -1830,7 +1830,7 @@ func (ps *Parser) isReadabilityDataTable(node *html.Node) bool {
 
 // setContentScore sets the readability score for a node.
 func (ps *Parser) setContentScore(node *html.Node, score float64) {
-	setAttribute(node, "data-readability-score", fmt.Sprintf("%.3f", score))
+	setAttribute(node, "data-readability-score", fmt.Sprintf("%.4f", score))
 }
 
 // hasContentScore checks if node has readability score.
