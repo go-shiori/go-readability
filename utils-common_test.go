@@ -58,6 +58,7 @@ func Test_toAbsoluteURI(t *testing.T) {
 		"ftp://ftp.server.com":   "ftp://ftp.server.com",
 		"www.google.com":         "http://localhost:8080/absolute/www.google.com",
 		"http//www.google.com":   "http://localhost:8080/absolute/http//www.google.com",
+		"../hello/relative":      "http://localhost:8080/hello/relative",
 	}
 
 	for url, expected := range scenarios {

@@ -46,17 +46,5 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 		return uri
 	}
 
-	// If the relative doesn't have prefix /,
-	// append it as path for base URI
-	if tmp.Path != "" && !strings.HasPrefix(tmp.Path, "/") {
-		clonedBase := *base
-		if !strings.HasSuffix(clonedBase.Path, "/") {
-			clonedBase.Path += "/"
-		}
-		clonedBase.Path += tmp.Path
-
-		return clonedBase.String()
-	}
-
 	return base.ResolveReference(tmp).String()
 }
