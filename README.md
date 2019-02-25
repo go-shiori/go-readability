@@ -54,7 +54,7 @@ func main() {
 		defer dstTxtFile.Close()
 		dstTxtFile.WriteString(article.TextContent)
 
-		dstHTMLFile, _ := os.Create(fmt.Sprintf("html-%02d.txt", i+1))
+		dstHTMLFile, _ := os.Create(fmt.Sprintf("html-%02d.html", i+1))
 		defer dstHTMLFile.Close()
 		dstHTMLFile.WriteString(article.Content)
 
@@ -67,7 +67,7 @@ func main() {
 		fmt.Printf("Image   : %s\n", article.Image)
 		fmt.Printf("Favicon : %s\n", article.Favicon)
 		fmt.Printf("Text content saved to \"text-%02d.txt\"\n", i+1)
-		fmt.Printf("HTML content saved to \"html-%02d.txt\"\n", i+1)
+		fmt.Printf("HTML content saved to \"html-%02d.html\"\n", i+1)
 		fmt.Println()
 	}
 }
