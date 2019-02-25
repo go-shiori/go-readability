@@ -73,6 +73,7 @@ type parseAttempt struct {
 type Article struct {
 	Title       string
 	Byline      string
+	Node        *html.Node
 	Content     string
 	TextContent string
 	Length      int
@@ -1189,12 +1190,16 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 		}
 	}
 
+	// get favicon
+	metadataFavicon := ps.getArticleFavicon()
+
 	return map[string]string{
 		"title":    metadataTitle,
 		"byline":   metadataByline,
 		"excerpt":  metadataExcerpt,
 		"siteName": metadataSiteName,
 		"image":    metadataImage,
+		"favicon":  metadataFavicon,
 	}
 }
 
@@ -1621,33 +1626,35 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	// Remove script tags from the document.
 	ps.removeScripts(ps.doc)
 
+	// Prepares the HTML document
 	ps.prepDocument()
 
-	favicon := ps.getArticleFavicon()
+	// Fetch metadata
 	metadata := ps.getArticleMetadata()
 	ps.articleTitle = metadata["title"]
 
+	// Try to grab article content
+	finalHTMLContent := ""
+	finalTextContent := ""
 	articleContent := ps.grabArticle()
-	if articleContent == nil {
-		return Article{}, fmt.Errorf("unable to find readable content")
-	}
 
-	ps.postProcessContent(articleContent)
+	if articleContent != nil {
+		ps.postProcessContent(articleContent)
 
-	// If we haven't found an excerpt in the article's metadata,
-	// use the article's first paragraph as the excerpt. This is used
-	// for displaying a preview of the article's content.
-	if metadata["excerpt"] == "" {
-		paragraphs := getElementsByTagName(articleContent, "p")
-		if len(paragraphs) > 0 {
-			metadata["excerpt"] = strings.TrimSpace(textContent(paragraphs[0]))
+		// If we haven't found an excerpt in the article's metadata,
+		// use the article's first paragraph as the excerpt. This is used
+		// for displaying a preview of the article's content.
+		if metadata["excerpt"] == "" {
+			paragraphs := getElementsByTagName(articleContent, "p")
+			if len(paragraphs) > 0 {
+				metadata["excerpt"] = strings.TrimSpace(textContent(paragraphs[0]))
+			}
 		}
+
+		finalHTMLContent = innerHTML(articleContent)
+		finalTextContent = textContent(articleContent)
+		finalTextContent = strings.TrimSpace(finalTextContent)
 	}
-
-	finalHTMLContent := innerHTML(articleContent)
-
-	finalTextContent := textContent(articleContent)
-	finalTextContent = strings.TrimSpace(finalTextContent)
 
 	finalByline := metadata["byline"]
 	if finalByline == "" {
@@ -1657,13 +1664,14 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	return Article{
 		Title:       ps.articleTitle,
 		Byline:      finalByline,
+		Node:        articleContent,
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
 		Length:      len(finalTextContent),
 		Excerpt:     metadata["excerpt"],
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
-		Favicon:     favicon,
+		Favicon:     metadata["favicon"],
 	}, nil
 }
 
