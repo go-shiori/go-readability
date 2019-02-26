@@ -1547,7 +1547,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			embeds := getElementsByTagName(node, "embed")
 			for i := 0; i < len(embeds); i++ {
 				embedSrc := getAttribute(embeds[i], "src")
-				if rxVideos.MatchString(embedSrc) {
+				if !rxVideos.MatchString(embedSrc) {
 					embedCount++
 				}
 			}
