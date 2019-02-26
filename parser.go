@@ -1018,8 +1018,17 @@ func (ps *Parser) grabArticle() *html.Node {
 			// move all the children over. Just assign IDs and class
 			// names here. No need to append because that already
 			// happened anyway.
-			setAttribute(topCandidate, "id", "readability-page-1")
-			setAttribute(topCandidate, "class", "page")
+			//
+			// By the way, this line is different with Readability.js.
+			// In Readability.js, when using `appendChild`, the node is
+			// still referenced. Meanwhile here, our `appendChild` will
+			// clone the node, put it in the new place, then delete
+			// the original.
+			firstChild := firstElementChild(articleContent)
+			if firstChild != nil && tagName(firstChild) == "div" {
+				setAttribute(firstChild, "id", "readability-page-1")
+				setAttribute(firstChild, "class", "page")
+			}
 		} else {
 			div := createElement("div")
 			setAttribute(div, "id", "readability-page-1")
@@ -1639,6 +1648,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	finalHTMLContent := ""
 	finalTextContent := ""
 	articleContent := ps.grabArticle()
+	var readableNode *html.Node
 
 	if articleContent != nil {
 		ps.postProcessContent(articleContent)
@@ -1653,6 +1663,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 			}
 		}
 
+		readableNode = firstElementChild(articleContent)
 		finalHTMLContent = innerHTML(articleContent)
 		finalTextContent = textContent(articleContent)
 		finalTextContent = strings.TrimSpace(finalTextContent)
@@ -1666,7 +1677,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	return Article{
 		Title:       ps.articleTitle,
 		Byline:      finalByline,
-		Node:        articleContent,
+		Node:        readableNode,
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
 		Length:      len(finalTextContent),
