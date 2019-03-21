@@ -10,6 +10,10 @@ Go-Readability is a Go package that find the main readable content and the metad
 
 This package is based from [Readability.js](https://github.com/mozilla/readability) by [Mozilla](https://github.com/mozilla), and written line by line to make sure it looks and works as similar as possible. This way, hopefully all web page that can be parsed by Readability.js are parse-able by go-readability as well.
 
+## Status
+
+This package is stable enough for use, and up to date with Readability.js until commit [`9009f64`](https://github.com/mozilla/readability/tree/9009f64f9ce8b7d593c1ef90864843f72e193cba).
+
 ## Installation
 
 To install this package, just run `go get` :

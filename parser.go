@@ -205,7 +205,7 @@ func (ps *Parser) getAllNodesWithTag(node *html.Node, tagNames ...string) []*htm
 	return result
 }
 
-// cleanClasses Removes the class="" attribute from every element in the
+// cleanClasses removes the class="" attribute from every element in the
 // given subtree, except those that match CLASSES_TO_PRESERVE and the
 // classesToPreserve array from the options object.
 func (ps *Parser) cleanClasses(node *html.Node) {
@@ -470,7 +470,9 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	// from final top candidates, which means we don't remove the top
 	// candidates even they have "share".
 	ps.forEachNode(children(articleContent), func(topCandidate *html.Node, _ int) {
-		ps.cleanMatchedNodes(topCandidate, rxShare)
+		ps.cleanMatchedNodes(topCandidate, func(node *html.Node, nodeClassID string) bool {
+			return rxShare.MatchString(nodeClassID) && len(textContent(node)) < ps.CharThresholds
+		})
 	})
 
 	// If there is only one h2 and its text content substantially
@@ -690,6 +692,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			if ps.flags.stripUnlikelys {
 				if rxUnlikelyCandidates.MatchString(matchString) &&
 					!rxOkMaybeItsACandidate.MatchString(matchString) &&
+					!ps.hasAncestorTag(node, "table", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
 					node = ps.removeAndGetNext(node)
 					continue
@@ -781,7 +784,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += len(strings.Split(innerText, ","))
+			contentScore += strings.Count(innerText, ",")
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
 			contentScore += int(math.Min(math.Floor(float64(len(innerText))/100.0), 3.0))
@@ -934,7 +937,7 @@ func (ps *Parser) grabArticle() *html.Node {
 					break
 				}
 
-				lastScore = ps.getContentScore(parentOfTopCandidate)
+				lastScore = parentScore
 				parentOfTopCandidate = parentOfTopCandidate.Parent
 			}
 
@@ -1368,20 +1371,16 @@ func (ps *Parser) clean(node *html.Node, tag string) {
 	ps.removeNodes(getElementsByTagName(node, tag), func(element *html.Node) bool {
 		// Allow youtube and vimeo videos through as people usually want to see those.
 		if isEmbed {
-			attributeValues := make([]string, len(element.Attr))
-			for i := 0; i < len(element.Attr); i++ {
-				attributeValues[i] = element.Attr[i].Val
-			}
-			strAttributeValues := strings.Join(attributeValues, "|")
-
 			// First, check the elements attributes to see if any of them contain
 			// youtube or vimeo
-			if rxVideos.MatchString(strAttributeValues) {
-				return false
+			for _, attr := range element.Attr {
+				if rxVideos.MatchString(attr.Val) {
+					return false
+				}
 			}
 
-			// Then check the elements inside this element for the same.
-			if rxVideos.MatchString(innerHTML(element)) {
+			// For embed with <object> tag, check inner HTML as well.
+			if tagName(element) == "object" && rxVideos.MatchString(innerHTML(element)) {
 				return false
 			}
 		}
@@ -1544,12 +1543,26 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			input := float64(len(getElementsByTagName(node, "input")))
 
 			embedCount := 0
-			embeds := getElementsByTagName(node, "embed")
-			for i := 0; i < len(embeds); i++ {
-				embedSrc := getAttribute(embeds[i], "src")
-				if !rxVideos.MatchString(embedSrc) {
-					embedCount++
+			embeds := ps.concatNodeLists(
+				getElementsByTagName(node, "object"),
+				getElementsByTagName(node, "embed"),
+				getElementsByTagName(node, "iframe"))
+
+			for _, embed := range embeds {
+				// If this embed has attribute that matches video regex,
+				// don't delete it.
+				for _, attr := range embed.Attr {
+					if rxVideos.MatchString(attr.Val) {
+						return false
+					}
 				}
+
+				// For embed with <object> tag, check inner HTML as well.
+				if tagName(embed) == "object" && rxVideos.MatchString(innerHTML(embed)) {
+					return false
+				}
+
+				embedCount++
 			}
 
 			linkDensity := ps.getLinkDensity(node)
@@ -1570,11 +1583,11 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 
 // cleanMatchedNodes cleans out elements whose id/class
 // combinations match specific string.
-func (ps *Parser) cleanMatchedNodes(e *html.Node, regex *regexp.Regexp) {
+func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string) bool) {
 	endOfSearchMarkerNode := ps.getNextNode(e, true)
 	next := ps.getNextNode(e, false)
 	for next != nil && next != endOfSearchMarkerNode {
-		if regex.MatchString(className(next) + " " + id(next)) {
+		if filter != nil && filter(next, className(next)+" "+id(next)) {
 			next = ps.removeAndGetNext(next)
 		} else {
 			next = ps.getNextNode(next, false)
@@ -1771,7 +1784,12 @@ func (ps *Parser) IsReadable(input io.Reader) bool {
 	})
 }
 
+// ====================== INFORMATION ======================
 // Methods below these point are not exist in Readability.js.
+// They are only used as workaround since Readability.js is
+// written in JS which is a dynamic language, while this
+// package is written in Go, which is static.
+// =========================================================
 
 // getArticleFavicon attempts to get high quality favicon
 // that used in article. It will only pick favicon in PNG
