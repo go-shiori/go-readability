@@ -1,0 +1,132 @@
+<div id="readability-page-1" class="page"><section>
+                        <p><strong>So finally you&#39;re <a href="http://fakehost/code/2013/testing-frontend-javascript-code-using-mocha-chai-and-sinon/">testing your frontend JavaScript code</a>? Great! The more you
+write tests, the more confident you are with your code… but how much precisely?
+That&#39;s where <a href="http://en.wikipedia.org/wiki/Code_coverage">code coverage</a> might
+help.</strong>
+                        </p>
+                        <p>The idea behind code coverage is to record which parts of your code (functions,
+                            statements, conditionals and so on) have been executed by your test suite,
+                            to compute metrics out of these data and usually to provide tools for navigating
+                            and inspecting them.</p>
+                        <p>Not a lot of frontend developers I know actually test their frontend code,
+                            and I can barely imagine how many of them have ever setup code coverage…
+                            Mostly because there are not many frontend-oriented tools in this area
+                            I guess.</p>
+                        <p>Actually I&#39;ve only found one which provides an adapter for <a href="http://visionmedia.github.io/mocha/">Mocha</a> and
+                            actually works…</p>
+                        <blockquote>
+                            <p>Drinking game for web devs:
+                                <br/>(1) Think of a noun
+                                <br/>(2) Google &#34;&lt;noun&gt;.js&#34;
+                                <br/>(3) If a library with that name exists - drink</p>— Shay Friedman (@ironshay)
+                            <a href="https://twitter.com/ironshay/statuses/370525864523743232">August 22, 2013</a>
+                        </blockquote>
+                        <p><strong><a href="http://blanketjs.org/">Blanket.js</a></strong> is an <em>easy to install, easy to configure,
+and easy to use JavaScript code coverage library that works both in-browser and
+with nodejs.</em>
+                        </p>
+                        <p>Its use is dead easy, adding Blanket support to your Mocha test suite
+                            is just matter of adding this simple line to your HTML test file:</p>
+<pre><code>&lt;script src=&#34;vendor/blanket.js&#34;
+        data-cover-adapter=&#34;vendor/mocha-blanket.js&#34;&gt;&lt;/script&gt;
+</code></pre>
+
+                        <p>Source files: <a href="https://raw.github.com/alex-seville/blanket/master/dist/qunit/blanket.min.js">blanket.js</a>,
+                            <a href="https://raw.github.com/alex-seville/blanket/master/src/adapters/mocha-blanket.js">mocha-blanket.js</a>
+                        </p>
+                        <p>As an example, let&#39;s reuse the silly <code>Cow</code> example we used
+                            <a href="http://fakehost/code/2013/testing-frontend-javascript-code-using-mocha-chai-and-sinon/">in a previous episode</a>:</p>
+<pre><code>// cow.js
+(function(exports) {
+  &#34;use strict&#34;;
+
+  function Cow(name) {
+    this.name = name || &#34;Anon cow&#34;;
+  }
+  exports.Cow = Cow;
+
+  Cow.prototype = {
+    greets: function(target) {
+      if (!target)
+        throw new Error(&#34;missing target&#34;);
+      return this.name + &#34; greets &#34; + target;
+    }
+  };
+})(this);
+</code></pre>
+
+                        <p>And its test suite, powered by Mocha and <a href="http://chaijs.com/">Chai</a>:</p>
+<pre><code>var expect = chai.expect;
+
+describe(&#34;Cow&#34;, function() {
+  describe(&#34;constructor&#34;, function() {
+    it(&#34;should have a default name&#34;, function() {
+      var cow = new Cow();
+      expect(cow.name).to.equal(&#34;Anon cow&#34;);
+    });
+
+    it(&#34;should set cow&#39;s name if provided&#34;, function() {
+      var cow = new Cow(&#34;Kate&#34;);
+      expect(cow.name).to.equal(&#34;Kate&#34;);
+    });
+  });
+
+  describe(&#34;#greets&#34;, function() {
+    it(&#34;should greet passed target&#34;, function() {
+      var greetings = (new Cow(&#34;Kate&#34;)).greets(&#34;Baby&#34;);
+      expect(greetings).to.equal(&#34;Kate greets Baby&#34;);
+    });
+  });
+});
+</code></pre>
+
+                        <p>Let&#39;s create the HTML test file for it, featuring Blanket and its adapter
+                            for Mocha:</p>
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta charset=&#34;utf-8&#34;&gt;
+  &lt;title&gt;Test&lt;/title&gt;
+  &lt;link rel=&#34;stylesheet&#34; media=&#34;all&#34; href=&#34;vendor/mocha.css&#34;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div id=&#34;mocha&#34;&gt;&lt;/div&gt;
+  &lt;div id=&#34;messages&#34;&gt;&lt;/div&gt;
+  &lt;div id=&#34;fixtures&#34;&gt;&lt;/div&gt;
+  &lt;script src=&#34;vendor/mocha.js&#34;&gt;&lt;/script&gt;
+  &lt;script src=&#34;vendor/chai.js&#34;&gt;&lt;/script&gt;
+  &lt;script src=&#34;vendor/blanket.js&#34;
+          data-cover-adapter=&#34;vendor/mocha-blanket.js&#34;&gt;&lt;/script&gt;
+  &lt;script&gt;mocha.setup(&#39;bdd&#39;);&lt;/script&gt;
+  &lt;script src=&#34;cow.js&#34; data-cover&gt;&lt;/script&gt;
+  &lt;script src=&#34;cow_test.js&#34;&gt;&lt;/script&gt;
+  &lt;script&gt;mocha.run();&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+                        <p><strong>Notes</strong>:</p>
+                        <ul>
+                            <li>Notice the <code>data-cover</code> attribute we added to the script tag
+                                loading the source of our library;</li>
+                            <li>The HTML test file <em>must</em> be served over HTTP for the adapter to
+                                be loaded.</li>
+                        </ul>
+                        <p>Running the tests now gives us something like this:</p>
+                        <p>
+                            <img alt="screenshot" src="http://fakehost/static/code/2013/blanket-coverage.png"/>
+                        </p>
+                        <p>As you can see, the report at the bottom highlights that we haven&#39;t actually
+                            tested the case where an error is raised in case a target name is missing.
+                            We&#39;ve been informed of that, nothing more, nothing less. We simply know
+                            we&#39;re missing a test here. Isn&#39;t this cool? I think so!</p>
+                        <p>Just remember that code coverage will only <a href="http://codebetter.com/karlseguin/2008/12/09/code-coverage-use-it-wisely/">bring you numbers</a> and
+                            raw information, not actual proofs that the whole of your <em>code logic</em> has
+                            been actually covered. If you ask me, the best inputs you can get about
+                            your code logic and implementation ever are the ones issued out of <a href="http://www.extremeprogramming.org/rules/pair.html">pair programming</a>
+sessions
+                            and <a href="http://alexgaynor.net/2013/sep/26/effective-code-review/">code reviews</a> —
+                            but that&#39;s another story.</p>
+                        <p><strong>So is code coverage silver bullet? No. Is it useful? Definitely. Happy testing!</strong>
+                        </p>
+                    </section></div>
