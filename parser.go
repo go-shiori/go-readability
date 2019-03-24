@@ -622,9 +622,12 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 
 	rel := getAttribute(node, "rel")
 	itemprop := getAttribute(node, "itemprop")
+	nodeText := textContent(node)
 	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) &&
-		ps.isValidByline(textContent(node)) {
-		ps.articleByline = strings.TrimSpace(textContent(node))
+		ps.isValidByline(nodeText) {
+		nodeText = strings.TrimSpace(nodeText)
+		nodeText = strings.Join(strings.Fields(nodeText), " ")
+		ps.articleByline = nodeText
 		return true
 	}
 
