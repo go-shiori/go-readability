@@ -125,6 +125,30 @@ func main() {
 }
 ```
 
+## Command Line Usage
+
+You can also use `go-readability` as command line app. To do that, first install the CLI :
+
+```
+go get -u -v github.com/go-shiori/go-readability/cmd/...
+```
+
+Now you can use it by running `go-readability` in your terminal :
+
+```
+$ go-readability -h
+
+go-readability is parser to fetch the readable content of a web page.
+The source can be an url or existing file in your storage.
+
+Usage:
+  go-readability [flags] source
+
+Flags:
+  -h, --help       help for go-readability
+  -m, --metadata   only print the page's metadata
+```
+
 ## Licenses
 
 Go-Readability is distributed under [MIT license](https://choosealicense.com/licenses/mit/), which means you can use and modify it however you want. However, if you make an enhancement for it, if possible, please send a pull request.

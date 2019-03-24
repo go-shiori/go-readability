@@ -17,10 +17,12 @@ import (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "go-readability",
-		Short: "go-readability is parser to fetch readable content of a web page",
+		Use:   "go-readability [flags] source",
 		Args:  cobra.ExactArgs(1),
 		Run:   rootCmdHandler,
+		Short: "go-readability is parser to fetch readable content of a web page",
+		Long: "go-readability is parser to fetch the readable content of a web page.\n" +
+			"The source can be an url or an existing file in your storage.",
 	}
 
 	rootCmd.Flags().BoolP("metadata", "m", false, "only print the page's metadata")
