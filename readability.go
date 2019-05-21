@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	nurl "net/url"
+	"strings"
 	"time"
 )
 
@@ -49,6 +50,12 @@ func FromURL(pageURL string, timeout time.Duration) (Article, error) {
 		return Article{}, fmt.Errorf("failed to fetch the page: %v", err)
 	}
 	defer resp.Body.Close()
+
+	// Make sure content type is HTML
+	cp := resp.Header.Get("Content-Type")
+	if !strings.Contains(cp, "text/html") {
+		return Article{}, fmt.Errorf("URL is not a HTML document")
+	}
 
 	// Check if the page is readable
 	var buffer bytes.Buffer
