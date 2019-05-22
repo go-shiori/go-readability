@@ -2,6 +2,7 @@ package readability
 
 import (
 	"fmt"
+	shtml "html"
 	"io"
 	"math"
 	nurl "net/url"
@@ -1209,6 +1210,10 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
+
+	// in some sites, excerpt is used with HTML encoding,
+	// so here we unescape it.
+	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 
 	return map[string]string{
 		"title":    metadataTitle,
