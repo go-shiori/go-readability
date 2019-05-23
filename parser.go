@@ -1743,6 +1743,11 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		finalByline = ps.articleByline
 	}
 
+	// Excerpt is an supposed to be short and concise,
+	// so it shouldn't have any new line
+	excerpt := strings.TrimSpace(metadata["excerpt"])
+	excerpt = strings.Join(strings.Fields(excerpt), " ")
+
 	return Article{
 		Title:       ps.articleTitle,
 		Byline:      finalByline,
@@ -1750,7 +1755,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
 		Length:      len(finalTextContent),
-		Excerpt:     metadata["excerpt"],
+		Excerpt:     excerpt,
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
