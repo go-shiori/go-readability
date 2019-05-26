@@ -1372,6 +1372,13 @@ func (ps *Parser) getClassWeight(node *html.Node) int {
 		}
 	}
 
+	// Look for a special ItemProp
+	if itemProp := itemprop(node); itemProp != "" {
+		if itemProp == "articleBody" {
+			weight += 50
+		}
+	}
+
 	return weight
 }
 

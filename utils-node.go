@@ -179,6 +179,13 @@ func id(node *html.Node) string {
 	return id
 }
 
+// itemprop returns the value of the itemprop attribute of the specified element.
+func itemprop(node *html.Node) string {
+	itemprop := getAttribute(node, "itemprop")
+	itemprop = strings.TrimSpace(itemprop)
+	return itemprop
+}
+
 // className returns the value of the class attribute of
 // the specified element.
 func className(node *html.Node) string {
