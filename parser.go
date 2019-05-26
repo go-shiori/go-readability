@@ -84,6 +84,7 @@ type Article struct {
 	SiteName    string
 	Image       string
 	Favicon     string
+	PageScore   float64
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1104,6 +1105,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		}
 
 		if parseSuccessful {
+			ps.setContentScore(articleContent, topCandidateScore)
 			return articleContent
 		}
 	}
@@ -1724,6 +1726,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	finalHTMLContent := ""
 	finalTextContent := ""
 	articleContent := ps.grabArticle()
+	pageScore := ps.getContentScore(articleContent)
 	var readableNode *html.Node
 
 	if articleContent != nil {
@@ -1766,6 +1769,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
+		PageScore:   pageScore,
 	}, nil
 }
 
