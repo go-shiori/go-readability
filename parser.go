@@ -1682,11 +1682,13 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		cleanConditionally: true,
 	}
 
-	// Parse page url
 	var err error
-	ps.documentURI, err = nurl.ParseRequestURI(pageURL)
-	if err != nil {
-		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
+	// If a pageURL is passed, parse the page url
+	if pageURL != "" {
+		ps.documentURI, err = nurl.ParseRequestURI(pageURL)
+		if err != nil {
+			return Article{}, fmt.Errorf("failed to parse URL: %v", err)
+		}
 	}
 
 	// Parse input
