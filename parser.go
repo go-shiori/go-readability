@@ -39,7 +39,7 @@ var (
 	rxTitleAnySeparator    = regexp.MustCompile(`(?i)[\|\-\\/>»]+`)
 	rxDisplayNone          = regexp.MustCompile(`(?i)display\s*:\s*none`)
 	rxSentencePeriod       = regexp.MustCompile(`(?i)\.( |$)`)
-	rxShare                = regexp.MustCompile(`(?i)share`)
+	rxShareElements        = regexp.MustCompile(`(?i)(\b|_)(share|sharedaddy)(\b|_)`)
 	rxFaviconSize          = regexp.MustCompile(`(?i)(\d+)x(\d+)`)
 	rxLazyImageSrcset      = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)\s+\d`)
 	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
@@ -474,9 +474,11 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	// Clean out elements have "share" in their id/class combinations
 	// from final top candidates, which means we don't remove the top
 	// candidates even they have "share".
+	shareElementThreshold := ps.CharThresholds
+
 	ps.forEachNode(children(articleContent), func(topCandidate *html.Node, _ int) {
 		ps.cleanMatchedNodes(topCandidate, func(node *html.Node, nodeClassID string) bool {
-			return rxShare.MatchString(nodeClassID) && len(textContent(node)) < ps.CharThresholds
+			return rxShareElements.MatchString(nodeClassID) && len(textContent(node)) < shareElementThreshold
 		})
 	})
 
