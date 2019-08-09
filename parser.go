@@ -1755,14 +1755,21 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	excerpt := strings.TrimSpace(metadata["excerpt"])
 	excerpt = strings.Join(strings.Fields(excerpt), " ")
 
+	// go-readability special:
+	// Internet is dangerous and weird, and sometimes we will find
+	// metadata isn't encoded using a valid Utf-8, so here we check it.
+	validTitle := toValidUtf8(ps.articleTitle, pageURL)
+	validByline := toValidUtf8(finalByline, "")
+	validExcerpt := toValidUtf8(excerpt, "")
+
 	return Article{
-		Title:       ps.articleTitle,
-		Byline:      finalByline,
+		Title:       validTitle,
+		Byline:      validByline,
 		Node:        readableNode,
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
 		Length:      len(finalTextContent),
-		Excerpt:     excerpt,
+		Excerpt:     validExcerpt,
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
