@@ -99,6 +99,8 @@ type Parser struct {
 	CharThresholds int
 	// ClassesToPreserve are the classes that readability sets itself.
 	ClassesToPreserve []string
+	// KeepClasses specify whether the classes should be stripped or not.
+	KeepClasses bool
 	// TagsToScore is element tags to score by default.
 	TagsToScore []string
 	// Debug determines if the log should be printed or not. Default: false.
@@ -121,6 +123,7 @@ func NewParser() Parser {
 		NTopCandidates:    5,
 		CharThresholds:    500,
 		ClassesToPreserve: []string{"page"},
+		KeepClasses:       false,
 		TagsToScore:       []string{"section", "h2", "h3", "h4", "h5", "h6", "p", "td", "pre"},
 		Debug:             false,
 	}
@@ -133,7 +136,9 @@ func (ps *Parser) postProcessContent(articleContent *html.Node) {
 	ps.fixRelativeURIs(articleContent)
 
 	// Remove classes.
-	ps.cleanClasses(articleContent)
+	if !ps.KeepClasses {
+		ps.cleanClasses(articleContent)
+	}
 
 	// Remove readability attributes.
 	ps.clearReadabilityAttr(articleContent)
