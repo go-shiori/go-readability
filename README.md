@@ -5,6 +5,7 @@ Go-Readability
 [![Travis CI](https://travis-ci.org/go-shiori/go-readability.svg?branch=master)](https://travis-ci.org/go-shiori/go-readability)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-shiori/go-readability)](https://goreportcard.com/report/github.com/go-shiori/go-readability)
 [![Donate](https://img.shields.io/badge/donate-PayPal-green.svg)](https://www.paypal.me/RadhiFadlillah)
+[![Donate](https://img.shields.io/badge/donate-Ko--fi-brightgreen)](https://ko-fi.com/radhifadlillah)
 
 Go-Readability is a Go package that find the main readable content and the metadata from a HTML page. It works by removing clutter like buttons, ads, background images, script, etc.
 
@@ -151,4 +152,4 @@ Flags:
 
 ## Licenses
 
-Go-Readability is distributed under [MIT license](https://choosealicense.com/licenses/mit/), which means you can use and modify it however you want. However, if you make an enhancement for it, if possible, please send a pull request.
+Go-Readability is distributed under [MIT license](https://choosealicense.com/licenses/mit/), which means you can use and modify it however you want. However, if you make an enhancement for it, if possible, please send a pull request. If you like this project, please consider donating to me either via [PayPal](https://www.paypal.me/RadhiFadlillah) or [Ko-Fi](https://ko-fi.com/radhifadlillah).
