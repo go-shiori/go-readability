@@ -1672,7 +1672,10 @@ func (ps *Parser) cleanHeaders(e *html.Node) {
 // isProbablyVisible determines if a node is visible.
 func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 	nodeStyle := getAttribute(node, "style")
-	return (nodeStyle == "" || !rxDisplayNone.MatchString(nodeStyle)) && !hasAttribute(node, "hidden")
+	nodeAriaHidden := getAttribute(node, "aria-hidden")
+	return (nodeStyle == "" || !rxDisplayNone.MatchString(nodeStyle)) &&
+		!hasAttribute(node, "hidden") &&
+		(nodeAriaHidden == "" || nodeAriaHidden != "true")
 }
 
 // Parse parses input and find the main readable content.
