@@ -56,27 +56,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 	// Start HTTP server
 	httpListen, _ := cmd.Flags().GetString("http")
 	if httpListen != "" {
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			metadata := r.URL.Query().Get("metadata")
-			metadataOnly, _ := strconv.ParseBool(metadata)
-			url := r.URL.Query().Get("url")
-			if url == "" {
-				w.Write([]byte(index))
-			} else {
-				log.Println("process URL", url)
-				content, err := getContent(url, metadataOnly)
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					w.Write([]byte(err.Error()))
-					log.Println(err)
-					return
-				}
-				if metadataOnly {
-					w.Header().Set("Content-Type", "application/json")
-				}
-				w.Write([]byte(content))
-			}
-		})
+		http.HandleFunc("/", HTTPHandler)
 		log.Println("Starting HTTP server at", httpListen)
 		log.Fatal(http.ListenAndServe(httpListen, nil))
 	}
@@ -92,6 +72,28 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 		fmt.Println(content)
 	} else {
 		cmd.Help()
+	}
+}
+
+// HTTPHandler gives readability content
+func HTTPHandler(w http.ResponseWriter, r *http.Request) {
+	metadata := r.URL.Query().Get("metadata")
+	metadataOnly, _ := strconv.ParseBool(metadata)
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		w.Write([]byte(index))
+	} else {
+		log.Println("process URL", url)
+		content, err := getContent(url, metadataOnly)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if metadataOnly {
+			w.Header().Set("Content-Type", "application/json")
+		}
+		w.Write([]byte(content))
 	}
 }
 
