@@ -56,7 +56,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 	// Start HTTP server
 	httpListen, _ := cmd.Flags().GetString("http")
 	if httpListen != "" {
-		http.HandleFunc("/", HTTPHandler)
+		http.HandleFunc("/", httpHandler)
 		log.Println("Starting HTTP server at", httpListen)
 		log.Fatal(http.ListenAndServe(httpListen, nil))
 	}
@@ -75,8 +75,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 	}
 }
 
-// HTTPHandler gives readability content
-func HTTPHandler(w http.ResponseWriter, r *http.Request) {
+func httpHandler(w http.ResponseWriter, r *http.Request) {
 	metadata := r.URL.Query().Get("metadata")
 	metadataOnly, _ := strconv.ParseBool(metadata)
 	url := r.URL.Query().Get("url")
