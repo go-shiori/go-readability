@@ -8,12 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-shiori/dom"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/net/html"
 )
 
 func getNodeExcerpt(node *html.Node) string {
-	outer := outerHTML(node)
+	outer := dom.OuterHTML(node)
 	outer = strings.Join(strings.Fields(outer), " ")
 	if len(outer) < 120 {
 		return outer
@@ -23,8 +24,8 @@ func getNodeExcerpt(node *html.Node) string {
 
 func compareArticleContent(result, expected *html.Node) error {
 	// Make sure number of nodes is same
-	resultNodesCount := len(children(result))
-	expectedNodesCount := len(children(expected))
+	resultNodesCount := len(dom.Children(result))
+	expectedNodesCount := len(dom.Children(expected))
 	if resultNodesCount != expectedNodesCount {
 		return fmt.Errorf("number of nodes is different, want %d got %d",
 			expectedNodesCount, resultNodesCount)
@@ -38,8 +39,8 @@ func compareArticleContent(result, expected *html.Node) error {
 		expectedExcerpt := getNodeExcerpt(expectedNode)
 
 		// Compare tag name
-		resultTagName := tagName(resultNode)
-		expectedTagName := tagName(expectedNode)
+		resultTagName := dom.TagName(resultNode)
+		expectedTagName := dom.TagName(expectedNode)
 		if resultTagName != expectedTagName {
 			return fmt.Errorf("tag name is different\n"+
 				"want    : %s (%s)\n"+
@@ -60,7 +61,7 @@ func compareArticleContent(result, expected *html.Node) error {
 		}
 
 		for _, resultAttr := range resultNode.Attr {
-			expectedAttrVal := getAttribute(expectedNode, resultAttr.Key)
+			expectedAttrVal := dom.GetAttribute(expectedNode, resultAttr.Key)
 			switch resultAttr.Key {
 			case "href", "src":
 				resultAttr.Val = strings.TrimSuffix(resultAttr.Val, "/")
@@ -77,8 +78,8 @@ func compareArticleContent(result, expected *html.Node) error {
 		}
 
 		// Compare text content
-		resultText := strings.TrimSpace(textContent(resultNode))
-		expectedText := strings.TrimSpace(textContent(expectedNode))
+		resultText := strings.TrimSpace(dom.TextContent(resultNode))
+		expectedText := strings.TrimSpace(dom.TextContent(expectedNode))
 
 		resultText = strings.Join(strings.Fields(resultText), " ")
 		expectedText = strings.Join(strings.Fields(expectedText), " ")
