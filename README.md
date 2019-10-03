@@ -4,8 +4,8 @@ Go-Readability
 [![GoDoc](https://godoc.org/github.com/go-shiori/go-readability?status.png)](https://godoc.org/github.com/go-shiori/go-readability)
 [![Travis CI](https://travis-ci.org/go-shiori/go-readability.svg?branch=master)](https://travis-ci.org/go-shiori/go-readability)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-shiori/go-readability)](https://goreportcard.com/report/github.com/go-shiori/go-readability)
-[![Donate](https://img.shields.io/badge/donate-PayPal-green.svg)](https://www.paypal.me/RadhiFadlillah)
-[![Donate](https://img.shields.io/badge/donate-Ko--fi-brightgreen)](https://ko-fi.com/radhifadlillah)
+[![Donate PayPal](https://img.shields.io/static/v1?label=donate&message=PayPal&color=00457C&logo=paypal)](https://www.paypal.me/RadhiFadlillah)
+[![Donate Ko-fi](https://img.shields.io/static/v1?label=donate&message=Ko-fi&color=F16061&logo=ko-fi)](https://ko-fi.com/radhifadlillah)
 
 Go-Readability is a Go package that find the main readable content and the metadata from a HTML page. It works by removing clutter like buttons, ads, background images, script, etc.
 
@@ -13,7 +13,7 @@ This package is based from [Readability.js](https://github.com/mozilla/readabili
 
 ## Status
 
-This package is stable enough for use, and up to date with Readability.js until commit [`60f470c`](https://github.com/mozilla/readability/commit/60f470c4bb618a7987d5701b1228ec5ff49f2773).
+This package is stable enough for use and up to date with Readability.js until commit [`b551f1c`](https://github.com/mozilla/readability/commit/b551f1cf6e2266e89629d3d0d5a913eee8af5a44).
 
 ## Installation
 
