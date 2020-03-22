@@ -247,12 +247,25 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 			return
 		}
 
-		// Replace links with javascript: URIs with text content,
-		// since they won't work after scripts have been removed
-		// from the page.
+		// Remove links with javascript: URIs, since they won't
+		// work after scripts have been removed from the page.
 		if strings.HasPrefix(href, "javascript:") {
-			text := dom.CreateTextNode(dom.TextContent(link))
-			dom.ReplaceChild(link.Parent, text, link)
+			linkChilds := dom.ChildNodes(link)
+
+			if len(linkChilds) == 1 && linkChilds[0].Type == html.TextNode {
+				// If the link only contains simple text content,
+				// it can be converted to a text node
+				text := dom.CreateTextNode(dom.TextContent(link))
+				dom.ReplaceChild(link.Parent, text, link)
+			} else {
+				// If the link has multiple children, they should
+				// all be preserved
+				container := dom.CreateElement("span")
+				for _, child := range linkChilds {
+					container.AppendChild(dom.CloneNode(child))
+				}
+				dom.ReplaceChild(link.Parent, container, link)
+			}
 		} else {
 			newHref := toAbsoluteURI(href, ps.documentURI)
 			if newHref == "" {
