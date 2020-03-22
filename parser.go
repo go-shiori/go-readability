@@ -1687,9 +1687,14 @@ func (ps *Parser) cleanHeaders(e *html.Node) {
 func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 	nodeStyle := dom.GetAttribute(node, "style")
 	nodeAriaHidden := dom.GetAttribute(node, "aria-hidden")
+	className := dom.GetAttribute(node, "class")
+
+	// Have to null-check node.style and node.className.indexOf to deal
+	// with SVG and MathML nodes. Also check for "fallback-image" so that
+	// Wikimedia Math images are displayed
 	return (nodeStyle == "" || !rxDisplayNone.MatchString(nodeStyle)) &&
 		!dom.HasAttribute(node, "hidden") &&
-		(nodeAriaHidden == "" || nodeAriaHidden != "true")
+		(nodeAriaHidden == "" || nodeAriaHidden != "true" || strings.Contains(className, "fallback-image"))
 }
 
 // Parse parses input and find the main readable content.
