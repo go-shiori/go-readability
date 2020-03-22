@@ -65,26 +65,6 @@ func renderToFile(element *html.Node, filename string) {
 	html.Render(dstFile, element)
 }
 
-// toValidUtf8 convert and make sure a string is a valid Utf-8 string.
-// In case the valid output is empty, it will use fallback as the output.
-func toValidUtf8(src, fallback string) string {
-	// Check if it's already valid
-	if valid := utf8.ValidString(src); valid {
-		return src
-	}
-
-	// Remove invalid runes
-	validUtf := strings.Map(utf8RuneChecker, src)
-
-	// If it's empty use fallback string
-	validUtf = strings.TrimSpace(validUtf)
-	if validUtf == "" {
-		return fallback
-	}
-
-	return validUtf
-}
-
 func utf8RuneChecker(r rune) rune {
 	if r == utf8.RuneError {
 		return -1

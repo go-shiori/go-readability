@@ -1780,9 +1780,9 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	// go-readability special:
 	// Internet is dangerous and weird, and sometimes we will find
 	// metadata isn't encoded using a valid Utf-8, so here we check it.
-	validTitle := toValidUtf8(ps.articleTitle, pageURL)
-	validByline := toValidUtf8(finalByline, "")
-	validExcerpt := toValidUtf8(excerpt, "")
+	validTitle := strings.ToValidUTF8(ps.articleTitle, pageURL)
+	validByline := strings.ToValidUTF8(finalByline, "")
+	validExcerpt := strings.ToValidUTF8(excerpt, "")
 
 	return Article{
 		Title:       validTitle,
