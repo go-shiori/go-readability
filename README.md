@@ -13,7 +13,7 @@ This package is based from [Readability.js](https://github.com/mozilla/readabili
 
 ## Status
 
-This package is stable enough for use and up to date with Readability.js until commit [`d6fc38c`](https://github.com/mozilla/readability/commit/d6fc38c4b45d9bc337e3579b53ffa7c188cc4d77).
+This package is stable enough for use and up to date with Readability.js until commit [`dc34dfd`](https://github.com/mozilla/readability/commit/dc34dfd8fa6d5c17801efbc2e115dc368b7117c8).
 
 ## Installation
 
