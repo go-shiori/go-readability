@@ -373,6 +373,10 @@ func (ps *Parser) getArticleTitle() string {
 func (ps *Parser) prepDocument() {
 	doc := ps.doc
 
+	// ADDITIONAL, not exist in readability.js:
+	// Remove all comments,
+	ps.removeComments(doc)
+
 	// Remove all style tags in head
 	ps.removeNodes(dom.GetElementsByTagName(doc, "style"), nil)
 
@@ -1927,6 +1931,30 @@ func (ps *Parser) getArticleFavicon() string {
 	})
 
 	return toAbsoluteURI(favicon, ps.documentURI)
+}
+
+// removeComments find all comments in document then remove it.
+func (ps *Parser) removeComments(doc *html.Node) {
+	// Find all comments
+	var comments []*html.Node
+	var finder func(*html.Node)
+
+	finder = func(node *html.Node) {
+		if node.Type == html.CommentNode {
+			comments = append(comments, node)
+		}
+
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			finder(child)
+		}
+	}
+
+	for child := doc.FirstChild; child != nil; child = child.NextSibling {
+		finder(child)
+	}
+
+	// Remove it
+	ps.removeNodes(comments, nil)
 }
 
 // In dynamic language like JavaScript, we can easily add new
