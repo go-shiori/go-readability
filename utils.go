@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/go-shiori/dom"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
@@ -25,6 +26,11 @@ func indexOf(array []string, key string) int {
 // wordCount returns number of word in str.
 func wordCount(str string) int {
 	return len(strings.Fields(str))
+}
+
+// charCount returns number of char in str.
+func charCount(str string) int {
+	return utf8.RuneCountInString(str)
 }
 
 // toAbsoluteURI convert uri to absolute path based on base.
@@ -65,9 +71,12 @@ func renderToFile(element *html.Node, filename string) {
 	html.Render(dstFile, element)
 }
 
-func utf8RuneChecker(r rune) rune {
-	if r == utf8.RuneError {
-		return -1
+func parseHTMLString(str string) (*html.Node, error) {
+	doc, err := html.Parse(strings.NewReader(str))
+	if err != nil {
+		return nil, err
 	}
-	return r
+
+	body := dom.GetElementsByTagName(doc, "body")[0]
+	return body, nil
 }

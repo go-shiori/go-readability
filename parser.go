@@ -343,7 +343,7 @@ func (ps *Parser) getArticleTitle() string {
 				curTitle = origTitle
 			}
 		}
-	} else if len(curTitle) > 150 || len(curTitle) < 15 {
+	} else if charCount(curTitle) > 150 || charCount(curTitle) < 15 {
 		if hOnes := dom.GetElementsByTagName(doc, "h1"); len(hOnes) == 1 {
 			curTitle = ps.getInnerText(hOnes[0], true)
 		}
@@ -497,7 +497,7 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 
 	ps.forEachNode(dom.Children(articleContent), func(topCandidate *html.Node, _ int) {
 		ps.cleanMatchedNodes(topCandidate, func(node *html.Node, nodeClassID string) bool {
-			return rxShareElements.MatchString(nodeClassID) && len(dom.TextContent(node)) < shareElementThreshold
+			return rxShareElements.MatchString(nodeClassID) && charCount(dom.TextContent(node)) < shareElementThreshold
 		})
 	})
 
@@ -508,7 +508,7 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	if h2s := dom.GetElementsByTagName(articleContent, "h2"); len(h2s) == 1 {
 		h2 := h2s[0]
 		h2Text := dom.TextContent(h2)
-		lengthSimilarRate := float64(len(h2Text)-len(ps.articleTitle)) / float64(len(ps.articleTitle))
+		lengthSimilarRate := float64(charCount(h2Text)-charCount(ps.articleTitle)) / float64(charCount(ps.articleTitle))
 		if math.Abs(lengthSimilarRate) < 0.5 {
 			titlesMatch := false
 			if lengthSimilarRate > 0 {
@@ -799,7 +799,7 @@ func (ps *Parser) grabArticle() *html.Node {
 
 			// If this paragraph is less than 25 characters, don't even count it.
 			innerText := ps.getInnerText(elementToScore, true)
-			if len(innerText) < 25 {
+			if charCount(innerText) < 25 {
 				return
 			}
 
@@ -816,7 +816,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore += strings.Count(innerText, ",")
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
-			contentScore += int(math.Min(math.Floor(float64(len(innerText))/100.0), 3.0))
+			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
 
 			// Initialize and score ancestors.
 			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
@@ -1016,7 +1016,7 @@ func (ps *Parser) grabArticle() *html.Node {
 				} else if dom.TagName(sibling) == "p" {
 					linkDensity := ps.getLinkDensity(sibling)
 					nodeContent := ps.getInnerText(sibling, true)
-					nodeLength := len(nodeContent)
+					nodeLength := charCount(nodeContent)
 
 					if nodeLength > 80 && linkDensity < 0.25 {
 						appendNode = true
@@ -1080,7 +1080,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		// gives us a higher likelihood of finding the content, and
 		// the sieve approach gives us a higher likelihood of
 		// finding the -right- content.
-		textLength := len(ps.getInnerText(articleContent, true))
+		textLength := charCount(ps.getInnerText(articleContent, true))
 		if textLength < ps.CharThresholds {
 			parseSuccessful = false
 
@@ -1135,7 +1135,8 @@ func (ps *Parser) grabArticle() *html.Node {
 // is less than 100 chars.
 func (ps *Parser) isValidByline(byline string) bool {
 	byline = strings.TrimSpace(byline)
-	return len(byline) > 0 && len(byline) < 100
+	nChar := charCount(byline)
+	return nChar > 0 && nChar < 100
 }
 
 // getArticleMetadata attempts to get excerpt and byline
@@ -1349,14 +1350,14 @@ func (ps *Parser) cleanStyles(node *html.Node) {
 // content. This is the amount of text that is inside a link divided
 // by the total text in the node.
 func (ps *Parser) getLinkDensity(element *html.Node) float64 {
-	textLength := len(ps.getInnerText(element, true))
+	textLength := charCount(ps.getInnerText(element, true))
 	if textLength == 0 {
 		return 0
 	}
 
 	linkLength := 0
 	ps.forEachNode(dom.GetElementsByTagName(element, "a"), func(linkNode *html.Node, _ int) {
-		linkLength += len(ps.getInnerText(linkNode, true))
+		linkLength += charCount(ps.getInnerText(linkNode, true))
 	})
 
 	return float64(linkLength) / float64(textLength)
@@ -1620,10 +1621,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			input := float64(len(dom.GetElementsByTagName(node, "input")))
 
 			embedCount := 0
-			embeds := ps.concatNodeLists(
-				dom.GetElementsByTagName(node, "object"),
-				dom.GetElementsByTagName(node, "embed"),
-				dom.GetElementsByTagName(node, "iframe"))
+			embeds := ps.getAllNodesWithTag(node, "object", "embed", "iframe")
 
 			for _, embed := range embeds {
 				// If this embed has attribute that matches video regex,
@@ -1643,7 +1641,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			}
 
 			linkDensity := ps.getLinkDensity(node)
-			contentLength := len(ps.getInnerText(node, true))
+			contentLength := charCount(ps.getInnerText(node, true))
 
 			return (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && li > p) ||
@@ -1790,7 +1788,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		Node:        readableNode,
 		Content:     finalHTMLContent,
 		TextContent: finalTextContent,
-		Length:      len(finalTextContent),
+		Length:      charCount(finalTextContent),
 		Excerpt:     validExcerpt,
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
@@ -1867,7 +1865,7 @@ func (ps *Parser) IsReadable(input io.Reader) bool {
 		}
 
 		nodeText := strings.TrimSpace(dom.TextContent(node))
-		nodeTextLength := len(nodeText)
+		nodeTextLength := charCount(nodeText)
 		if nodeTextLength < 140 {
 			return false
 		}
