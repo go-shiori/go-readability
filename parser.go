@@ -1251,6 +1251,61 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	}
 }
 
+// unwrapNoscriptImages find all <noscript> that located after <img> node,
+// and contains exactly single <img> element. Once it found, this method
+// will replace the previous <img> with <img> inside <noscript>, then finally
+// remove the <noscript> tag. This is done because in some website (e.g. Medium),
+// they use lazy load method like this.
+// This is ADDITIONAL and doesn't exist yet in readability.js.
+func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
+	// First, find div which only contains single img element, then put it out.
+	divs := dom.GetElementsByTagName(doc, "div")
+	ps.forEachNode(divs, func(div *html.Node, _ int) {
+		if children := dom.Children(div); len(children) == 1 && dom.TagName(children[0]) == "img" {
+			dom.ReplaceChild(div.Parent, children[0], div)
+		}
+	})
+
+	// Next find img without source, and remove it. This is done to
+	// prevent a placeholder img is replaced by img from noscript in next step.
+	imgs := dom.GetElementsByTagName(doc, "img")
+	ps.forEachNode(imgs, func(img *html.Node, _ int) {
+		src := dom.GetAttribute(img, "src")
+		srcset := dom.GetAttribute(img, "srcset")
+		dataSrc := dom.GetAttribute(img, "data-src")
+		dataSrcset := dom.GetAttribute(img, "data-srcset")
+
+		if src == "" && srcset == "" && dataSrc == "" && dataSrcset == "" {
+			img.Parent.RemoveChild(img)
+		}
+	})
+
+	// Next find noscript and try to extract its image
+	noScripts := dom.GetElementsByTagName(doc, "noscript")
+	ps.forEachNode(noScripts, func(noscript *html.Node, i int) {
+		// Make sure prev sibling is exist and it's image
+		prevElement := dom.PreviousElementSibling(noscript)
+		if dom.TagName(prevElement) != "img" {
+			return
+		}
+
+		// In Go content of noscript is treated as string, so here we parse it.
+		tmp, err := parseHTMLString(dom.TextContent(noscript))
+		if err != nil {
+			return
+		}
+
+		// Make sure noscript only has one children, and it's <img> element
+		children := dom.Children(tmp)
+		if len(children) != 1 || dom.TagName(children[0]) != "img" {
+			return
+		}
+
+		// At this point, just replace the previous img with img from noscript
+		dom.ReplaceChild(noscript.Parent, children[0], prevElement)
+	})
+}
+
 // removeScripts removes script tags from the document.
 func (ps *Parser) removeScripts(doc *html.Node) {
 	scripts := dom.GetElementsByTagName(doc, "script")
@@ -1733,6 +1788,10 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 			return Article{}, fmt.Errorf("documents too large: %d elements", numTags)
 		}
 	}
+
+	// ADDITIONAL, not exist in readability.js
+	// Unwrap image from noscript
+	ps.unwrapNoscriptImages(ps.doc)
 
 	// Remove script tags from the document.
 	ps.removeScripts(ps.doc)
