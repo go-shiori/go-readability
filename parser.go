@@ -44,6 +44,7 @@ var (
 	rxFaviconSize          = regexp.MustCompile(`(?i)(\d+)x(\d+)`)
 	rxLazyImageSrcset      = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)\s+\d`)
 	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
+	rxImgExtensions        = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)`)
 )
 
 // Constants that used by readability.
@@ -1251,59 +1252,97 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	}
 }
 
-// unwrapNoscriptImages find all <noscript> that located after <img> node,
-// and contains exactly single <img> element. Once it found, this method
-// will replace the previous <img> with <img> inside <noscript>, then finally
-// remove the <noscript> tag. This is done because in some website (e.g. Medium),
-// they use lazy load method like this.
-// This is ADDITIONAL and doesn't exist yet in readability.js.
+// isSingleImage checks if node is image, or if node contains exactly
+// only one image whether as a direct child or as its descendants.
+func (ps *Parser) isSingleImage(node *html.Node) bool {
+	if dom.TagName(node) == "img" {
+		return true
+	}
+
+	children := dom.Children(node)
+	textContent := dom.TextContent(node)
+	if len(children) != 1 || strings.TrimSpace(textContent) != "" {
+		return false
+	}
+
+	return ps.isSingleImage(children[0])
+}
+
+// unwrapNoscriptImages finds all <noscript> that are located after <img> nodes,
+// and which contain only one <img> element. Replace the first image with
+// the image from inside the <noscript> tag, and remove the <noscript> tag.
+// This improves the quality of the images we use on some sites (e.g. Medium).
 func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
-	// First, find div which only contains single img element, then put it out.
-	divs := dom.GetElementsByTagName(doc, "div")
-	ps.forEachNode(divs, func(div *html.Node, _ int) {
-		if children := dom.Children(div); len(children) == 1 && dom.TagName(children[0]) == "img" {
-			dom.ReplaceChild(div.Parent, children[0], div)
+	// Find img without source or attributes that might contains image, and
+	// remove it. This is done to prevent a placeholder img is replaced by
+	// img from noscript in next step.
+	for _, img := range dom.GetElementsByTagName(doc, "img") {
+		needToBeRemoved := true
+		for _, attr := range img.Attr {
+			switch attr.Key {
+			case "src", "data-src", "srcset", "data-srcset":
+				needToBeRemoved = false
+				break
+			}
+
+			if rxImgExtensions.MatchString(attr.Val) {
+				needToBeRemoved = false
+				break
+			}
 		}
-	})
 
-	// Next find img without source, and remove it. This is done to
-	// prevent a placeholder img is replaced by img from noscript in next step.
-	imgs := dom.GetElementsByTagName(doc, "img")
-	ps.forEachNode(imgs, func(img *html.Node, _ int) {
-		src := dom.GetAttribute(img, "src")
-		srcset := dom.GetAttribute(img, "srcset")
-		dataSrc := dom.GetAttribute(img, "data-src")
-		dataSrcset := dom.GetAttribute(img, "data-srcset")
-
-		if src == "" && srcset == "" && dataSrc == "" && dataSrcset == "" {
+		if needToBeRemoved {
 			img.Parent.RemoveChild(img)
 		}
-	})
+	}
 
 	// Next find noscript and try to extract its image
-	noScripts := dom.GetElementsByTagName(doc, "noscript")
-	ps.forEachNode(noScripts, func(noscript *html.Node, i int) {
-		// Make sure prev sibling is exist and it's image
-		prevElement := dom.PreviousElementSibling(noscript)
-		if dom.TagName(prevElement) != "img" {
-			return
-		}
-
-		// In Go content of noscript is treated as string, so here we parse it.
-		tmp, err := parseHTMLString(dom.TextContent(noscript))
+	for _, noscript := range dom.GetElementsByTagName(doc, "noscript") {
+		// Parse content of noscript and make sure it only contains image
+		noscriptContent := dom.TextContent(noscript)
+		tmpDoc, err := html.Parse(strings.NewReader(noscriptContent))
 		if err != nil {
-			return
+			continue
 		}
 
-		// Make sure noscript only has one children, and it's <img> element
-		children := dom.Children(tmp)
-		if len(children) != 1 || dom.TagName(children[0]) != "img" {
-			return
+		tmpBody := dom.GetElementsByTagName(tmpDoc, "body")[0]
+		if !ps.isSingleImage(tmpBody) {
+			continue
 		}
 
-		// At this point, just replace the previous img with img from noscript
-		dom.ReplaceChild(noscript.Parent, children[0], prevElement)
-	})
+		// If noscript has previous sibling and it only contains image,
+		// replace it with noscript content. However we also keep old
+		// attributes that might contains image.
+		prevElement := dom.PreviousElementSibling(noscript)
+		if prevElement != nil && ps.isSingleImage(prevElement) {
+			prevImg := prevElement
+			if dom.TagName(prevImg) != "img" {
+				prevImg = dom.GetElementsByTagName(prevElement, "img")[0]
+			}
+
+			newImg := dom.GetElementsByTagName(tmpBody, "img")[0]
+			for _, attr := range prevImg.Attr {
+				if attr.Val == "" {
+					continue
+				}
+
+				if attr.Key == "src" || attr.Key == "srcset" || rxImgExtensions.MatchString(attr.Val) {
+					if dom.GetAttribute(newImg, attr.Key) == attr.Val {
+						continue
+					}
+
+					attrName := attr.Key
+					if dom.HasAttribute(newImg, attrName) {
+						attrName = "data-old-" + attrName
+					}
+
+					dom.SetAttribute(newImg, attrName, attr.Val)
+				}
+			}
+
+			dom.ReplaceChild(noscript.Parent, dom.FirstElementChild(tmpBody), prevElement)
+		}
+	}
 }
 
 // removeScripts removes script tags from the document.
