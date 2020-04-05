@@ -41,7 +41,12 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 	}
 
 	// If it is hash tag, return as it is
-	if uri[:1] == "#" {
+	if strings.HasPrefix(uri, "#") {
+		return uri
+	}
+
+	// If it is data URI, return as it is
+	if strings.HasPrefix(uri, "data:") {
 		return uri
 	}
 

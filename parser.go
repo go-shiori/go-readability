@@ -45,6 +45,7 @@ var (
 	rxLazyImageSrcset      = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)\s+\d`)
 	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
 	rxImgExtensions        = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)`)
+	rxSrcsetURL            = regexp.MustCompile(`(?i)(\S+)(\s+[\d.]+[xw])?,?`)
 )
 
 // Constants that used by readability.
@@ -277,18 +278,35 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 		}
 	})
 
-	imgs := ps.getAllNodesWithTag(articleContent, "img")
-	ps.forEachNode(imgs, func(img *html.Node, _ int) {
-		src := dom.GetAttribute(img, "src")
-		if src == "" {
-			return
+	medias := ps.getAllNodesWithTag(articleContent, "img", "picture", "figure", "video", "audio", "source")
+	ps.forEachNode(medias, func(media *html.Node, _ int) {
+		src := dom.GetAttribute(media, "src")
+		poster := dom.GetAttribute(media, "poster")
+		srcset := dom.GetAttribute(media, "srcset")
+
+		if src != "" {
+			newSrc := toAbsoluteURI(src, ps.documentURI)
+			dom.SetAttribute(media, "src", newSrc)
 		}
 
-		newSrc := toAbsoluteURI(src, ps.documentURI)
-		if newSrc == "" {
-			dom.RemoveAttribute(img, "src")
-		} else {
-			dom.SetAttribute(img, "src", newSrc)
+		if poster != "" {
+			newPoster := toAbsoluteURI(poster, ps.documentURI)
+			dom.SetAttribute(media, "poster", newPoster)
+		}
+
+		if srcset != "" {
+			var newSets []string
+			for _, parts := range rxSrcsetURL.FindAllStringSubmatch(srcset, -1) {
+				oldURL := parts[1]
+				targetWidth := parts[2]
+
+				newSet := toAbsoluteURI(oldURL, ps.documentURI)
+				newSet += targetWidth
+				newSets = append(newSets, newSet)
+			}
+
+			newSrcset := strings.Join(newSets, ",")
+			dom.SetAttribute(media, "srcset", newSrcset)
 		}
 	})
 }
@@ -1240,7 +1258,10 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 
 	// in some sites, excerpt is used with HTML encoding,
 	// so here we unescape it.
+	metadataTitle = shtml.UnescapeString(metadataTitle)
+	metadataByline = shtml.UnescapeString(metadataByline)
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
+	metadataSiteName = shtml.UnescapeString(metadataSiteName)
 
 	return map[string]string{
 		"title":    metadataTitle,
@@ -1648,35 +1669,53 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 		nodeTag := dom.TagName(elem)
 		nodeClass := dom.ClassName(elem)
 
-		if (src == "" && srcset == "") || strings.Contains(strings.ToLower(nodeClass), "lazy") {
-			for i := 0; i < len(elem.Attr); i++ {
-				attr := elem.Attr[i]
-				if attr.Key == "src" || attr.Key == "srcset" {
-					continue
-				}
+		// In some sites (e.g. Kotaku), they put 1px square image as data uri in
+		// the src attribute. So, here we check if the data uri is too short,
+		// just might as well remove it.
+		if src != "" && strings.HasPrefix(src, "data:") {
+			// I don't have any source but I guess if image is less
+			// than 100 bytes it will be too small, therefore it might
+			// be placeholder image. With that said, I will use 100B
+			// as threshold (or 133B after encoded to base64).
+			b64starts := strings.Index(src, "base64,") + 7
+			b64length := len(src) - b64starts
+			if b64length < 133 {
+				src = ""
+				dom.RemoveAttribute(elem, "src")
+			}
+		}
 
-				copyTo := ""
-				if rxLazyImageSrcset.MatchString(attr.Val) {
-					copyTo = "srcset"
-				} else if rxLazyImageSrc.MatchString(attr.Val) {
-					copyTo = "src"
-				}
+		if (src != "" || srcset != "") && !strings.Contains(strings.ToLower(nodeClass), "lazy") {
+			return
+		}
 
-				if copyTo == "" {
-					continue
-				}
+		for i := 0; i < len(elem.Attr); i++ {
+			attr := elem.Attr[i]
+			if attr.Key == "src" || attr.Key == "srcset" {
+				continue
+			}
 
-				if nodeTag == "img" || nodeTag == "picture" {
-					// if this is an img or picture, set the attribute directly
-					dom.SetAttribute(elem, copyTo, attr.Val)
-				} else if nodeTag == "figure" && len(ps.getAllNodesWithTag(elem, "img", "picture")) == 0 {
-					// if the item is a <figure> that does not contain an image or picture,
-					// create one and place it inside the figure see the nytimes-3
-					// testcase for an example
-					img := dom.CreateElement("img")
-					dom.SetAttribute(img, copyTo, attr.Val)
-					dom.AppendChild(elem, img)
-				}
+			copyTo := ""
+			if rxLazyImageSrcset.MatchString(attr.Val) {
+				copyTo = "srcset"
+			} else if rxLazyImageSrc.MatchString(attr.Val) {
+				copyTo = "src"
+			}
+
+			if copyTo == "" {
+				continue
+			}
+
+			if nodeTag == "img" || nodeTag == "picture" {
+				// if this is an img or picture, set the attribute directly
+				dom.SetAttribute(elem, copyTo, attr.Val)
+			} else if nodeTag == "figure" && len(ps.getAllNodesWithTag(elem, "img", "picture")) == 0 {
+				// if the item is a <figure> that does not contain an image or picture,
+				// create one and place it inside the figure see the nytimes-3
+				// testcase for an example
+				img := dom.CreateElement("img")
+				dom.SetAttribute(img, copyTo, attr.Val)
+				dom.AppendChild(elem, img)
 			}
 		}
 	})
