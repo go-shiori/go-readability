@@ -1297,38 +1297,35 @@ func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
 	// Find img without source or attributes that might contains image, and
 	// remove it. This is done to prevent a placeholder img is replaced by
 	// img from noscript in next step.
-	for _, img := range dom.GetElementsByTagName(doc, "img") {
-		needToBeRemoved := true
+	imgs := dom.GetElementsByTagName(doc, "img")
+	ps.forEachNode(imgs, func(img *html.Node, _ int) {
 		for _, attr := range img.Attr {
 			switch attr.Key {
 			case "src", "data-src", "srcset", "data-srcset":
-				needToBeRemoved = false
-				break
+				return
 			}
 
 			if rxImgExtensions.MatchString(attr.Val) {
-				needToBeRemoved = false
-				break
+				return
 			}
 		}
 
-		if needToBeRemoved {
-			img.Parent.RemoveChild(img)
-		}
-	}
+		img.Parent.RemoveChild(img)
+	})
 
 	// Next find noscript and try to extract its image
-	for _, noscript := range dom.GetElementsByTagName(doc, "noscript") {
+	noscripts := dom.GetElementsByTagName(doc, "noscript")
+	ps.forEachNode(noscripts, func(noscript *html.Node, _ int) {
 		// Parse content of noscript and make sure it only contains image
 		noscriptContent := dom.TextContent(noscript)
 		tmpDoc, err := html.Parse(strings.NewReader(noscriptContent))
 		if err != nil {
-			continue
+			return
 		}
 
 		tmpBody := dom.GetElementsByTagName(tmpDoc, "body")[0]
 		if !ps.isSingleImage(tmpBody) {
-			continue
+			return
 		}
 
 		// If noscript has previous sibling and it only contains image,
@@ -1363,7 +1360,7 @@ func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
 
 			dom.ReplaceChild(noscript.Parent, dom.FirstElementChild(tmpBody), prevElement)
 		}
-	}
+	})
 }
 
 // removeScripts removes script tags from the document.
