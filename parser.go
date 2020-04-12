@@ -749,6 +749,11 @@ func (ps *Parser) grabArticle() *html.Node {
 					node = ps.removeAndGetNext(node)
 					continue
 				}
+
+				if dom.GetAttribute(node, "role") == "complementary" {
+					node = ps.removeAndGetNext(node)
+					continue
+				}
 			}
 
 			// Remove DIV, SECTION, and HEADER nodes without any
