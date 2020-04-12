@@ -45,7 +45,8 @@ var (
 	rxLazyImageSrcset      = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)\s+\d`)
 	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
 	rxImgExtensions        = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)`)
-	rxSrcsetURL            = regexp.MustCompile(`(?i)(\S+)(\s+[\d.]+[xw])?,?`)
+	rxSrcsetURL            = regexp.MustCompile(`(?i)(\S+)(\s+[\d.]+[xw])?(\s*(?:,|$))`)
+	rxB64DataURL           = regexp.MustCompile(`(?i)^data:\s*([^\s;,]+)\s*;\s*base64\s*`)
 )
 
 // Constants that used by readability.
@@ -295,17 +296,11 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 		}
 
 		if srcset != "" {
-			var newSets []string
-			for _, parts := range rxSrcsetURL.FindAllStringSubmatch(srcset, -1) {
-				oldURL := parts[1]
-				targetWidth := parts[2]
+			newSrcset := rxSrcsetURL.ReplaceAllStringFunc(srcset, func(s string) string {
+				p := rxSrcsetURL.FindStringSubmatch(s)
+				return toAbsoluteURI(p[1], ps.documentURI) + p[2] + p[3]
+			})
 
-				newSet := toAbsoluteURI(oldURL, ps.documentURI)
-				newSet += targetWidth
-				newSets = append(newSets, newSet)
-			}
-
-			newSrcset := strings.Join(newSets, ",")
 			dom.SetAttribute(media, "srcset", newSrcset)
 		}
 	})
@@ -1261,8 +1256,8 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
 
-	// in some sites, excerpt is used with HTML encoding,
-	// so here we unescape it.
+	// in many sites the meta value is escaped with HTML entities,
+	// so here we need to unescape it
 	metadataTitle = shtml.UnescapeString(metadataTitle)
 	metadataByline = shtml.UnescapeString(metadataByline)
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
@@ -1674,16 +1669,39 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 		// In some sites (e.g. Kotaku), they put 1px square image as data uri in
 		// the src attribute. So, here we check if the data uri is too short,
 		// just might as well remove it.
-		if src != "" && strings.HasPrefix(src, "data:") {
-			// I don't have any source but I guess if image is less
-			// than 100 bytes it will be too small, therefore it might
-			// be placeholder image. With that said, I will use 100B
-			// as threshold (or 133B after encoded to base64).
-			b64starts := strings.Index(src, "base64,") + 7
-			b64length := len(src) - b64starts
-			if b64length < 133 {
-				src = ""
-				dom.RemoveAttribute(elem, "src")
+		if src != "" && rxB64DataURL.MatchString(src) {
+			// Make sure it's not SVG, because SVG can have a meaningful image
+			// in under 133 bytes.
+			parts := rxB64DataURL.FindStringSubmatch(src)
+			if parts[1] == "image/svg+xml" {
+				return
+			}
+
+			// Make sure this element has other attributes which contains
+			// image. If it doesn't, then this src is important and
+			// shouldn't be removed.
+			srcCouldBeRemoved := false
+			for _, attr := range elem.Attr {
+				if attr.Key == "src" {
+					continue
+				}
+
+				if rxImgExtensions.MatchString(attr.Val) {
+					srcCouldBeRemoved = true
+					break
+				}
+			}
+
+			// Here we assume if image is less than 100 bytes (or 133B
+			// after encoded to base64) it will be too small, therefore
+			// it might be placeholder image.
+			if srcCouldBeRemoved {
+				b64starts := strings.Index(src, "base64") + 7
+				b64length := len(src) - b64starts
+				if b64length < 133 {
+					src = ""
+					dom.RemoveAttribute(elem, "src")
+				}
 			}
 		}
 
