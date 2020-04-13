@@ -33,6 +33,12 @@ func charCount(str string) int {
 	return utf8.RuneCountInString(str)
 }
 
+// isValidURL checks if URL is valid.
+func isValidURL(s string) bool {
+	_, err := nurl.ParseRequestURI(s)
+	return err == nil
+}
+
 // toAbsoluteURI convert uri to absolute path based on base.
 // However, if uri is prefixed with hash (#), the uri won't be changed.
 func toAbsoluteURI(uri string, base *nurl.URL) string {
