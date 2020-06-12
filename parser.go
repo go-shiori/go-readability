@@ -32,7 +32,7 @@ var (
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
 	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name|image\S*)\s*`)
-	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|image)\s*$`)
+	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site|site_name|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
 	rxTitleHierarchySep    = regexp.MustCompile(`(?i) [\\/>»] `)
 	rxTitleRemoveFinalPart = regexp.MustCompile(`(?i)(.*)[\|\-\\/>»] .*`)
@@ -76,6 +76,11 @@ type parseAttempt struct {
 	textLength     int
 }
 
+// SocialInfo info contains information about the social media accounts related to this page
+type SocialInfo struct {
+	Username string
+}
+
 // Article is the final readable content.
 type Article struct {
 	Title       string
@@ -88,6 +93,7 @@ type Article struct {
 	SiteName    string
 	Image       string
 	Favicon     string
+	Social      map[string]SocialInfo
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1263,6 +1269,18 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 	metadataSiteName = shtml.UnescapeString(metadataSiteName)
 
+	metadataTwitter := ""
+	possibleAttrNames = []string{"twitter:site", "twitter:creator"}
+	for _, name := range possibleAttrNames {
+		if value, ok := values[name]; ok {
+			metadataTwitter = value
+			if metadataTwitter != "" && metadataTwitter[0] != '@' {
+				metadataTwitter = "@" + metadataTwitter
+			}
+			break
+		}
+	}
+
 	return map[string]string{
 		"title":    metadataTitle,
 		"byline":   metadataByline,
@@ -1270,6 +1288,7 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 		"siteName": metadataSiteName,
 		"image":    metadataImage,
 		"favicon":  metadataFavicon,
+		"twitter":  metadataTwitter,
 	}
 }
 
@@ -1943,6 +1962,13 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	validByline := strings.ToValidUTF8(finalByline, "")
 	validExcerpt := strings.ToValidUTF8(excerpt, "")
 
+	social := make(map[string]SocialInfo)
+	if twitter, ok := metadata["twitter"]; ok && twitter != "" {
+		social["twitter"] = SocialInfo{
+			Username: twitter,
+		}
+	}
+
 	return Article{
 		Title:       validTitle,
 		Byline:      validByline,
@@ -1954,6 +1980,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
+		Social:      social,
 	}, nil
 }
 
