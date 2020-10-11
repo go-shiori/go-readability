@@ -10,5 +10,3 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/net v0.0.0-20201010224723-4f7140c49acb
 )
-
-replace github.com/go-shiori/dom => /home/radhi/Development/Projects/Go/go-shiori/dom
