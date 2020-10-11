@@ -265,7 +265,7 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 				// all be preserved
 				container := dom.CreateElement("span")
 				for _, child := range linkChilds {
-					container.AppendChild(dom.CloneNode(child))
+					container.AppendChild(dom.Clone(child, true))
 				}
 				dom.ReplaceChild(link.Parent, container, link)
 			}
@@ -700,7 +700,7 @@ func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // stuff a user wants to read. Then return it wrapped up in a div.
 func (ps *Parser) grabArticle() *html.Node {
 	for {
-		doc := dom.CloneNode(ps.doc)
+		doc := dom.Clone(ps.doc, true)
 
 		var page *html.Node
 		if nodes := dom.GetElementsByTagName(doc, "body"); len(nodes) > 0 {
@@ -779,7 +779,7 @@ func (ps *Parser) grabArticle() *html.Node {
 							dom.AppendChild(p, childNode)
 						} else if !ps.isWhitespace(childNode) {
 							p = dom.CreateElement("p")
-							dom.AppendChild(p, dom.CloneNode(childNode))
+							dom.AppendChild(p, dom.Clone(childNode, true))
 							dom.ReplaceChild(node, p, childNode)
 						}
 					} else if p != nil {
@@ -799,8 +799,7 @@ func (ps *Parser) grabArticle() *html.Node {
 				// practice, paragraphs.
 				if ps.hasSingleTagInsideElement(node, "p") && ps.getLinkDensity(node) < 0.25 {
 					newNode := dom.Children(node)[0]
-					newNode, _ = dom.ReplaceChild(node.Parent, newNode, node)
-					node = newNode
+					node, _ = dom.ReplaceChild(node.Parent, newNode, node)
 					elementsToScore = append(elementsToScore, node)
 				} else if !ps.hasChildBlockElement(node) {
 					ps.setNodeTag(node, "p")
