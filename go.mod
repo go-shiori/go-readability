@@ -3,10 +3,11 @@ module github.com/go-shiori/go-readability
 go 1.13
 
 require (
-	github.com/go-shiori/dom v0.0.0-20201011032054-d6b74a54fe52
+	github.com/go-shiori/dom v0.0.0-20210507091519-e6b911f28256
 	github.com/sergi/go-diff v1.1.0
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.0.0-20201010224723-4f7140c49acb
+	golang.org/x/net v0.0.0-20210505214959-0714010a04ed
+	golang.org/x/sys v0.0.0-20210507014357-30e306a8bba5 // indirect
 )
