@@ -101,3 +101,11 @@ func strOr(args ...string) string {
 	}
 	return ""
 }
+
+func sliceToMap(strings ...string) map[string]struct{} {
+	result := make(map[string]struct{})
+	for _, s := range strings {
+		result[s] = struct{}{}
+	}
+	return result
+}

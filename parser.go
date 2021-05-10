@@ -55,6 +55,7 @@ var (
 
 // Constants that used by readability.
 var (
+	unlikelyRoles                = sliceToMap("menu", "menubar", "complementary", "navigation", "alert", "alertdialog", "dialog")
 	divToPElems                  = []string{"a", "blockquote", "dl", "div", "img", "ol", "p", "pre", "table", "ul", "select"}
 	alterToDivExceptions         = []string{"div", "article", "section", "p"}
 	presentationalAttributes     = []string{"align", "background", "bgcolor", "border", "cellpadding", "cellspacing", "frame", "hspace", "rules", "style", "valign", "vspace"}
@@ -795,7 +796,8 @@ func (ps *Parser) grabArticle() *html.Node {
 					continue
 				}
 
-				if dom.GetAttribute(node, "role") == "complementary" {
+				role := dom.GetAttribute(node, "role")
+				if _, include := unlikelyRoles[role]; include {
 					node = ps.removeAndGetNext(node)
 					continue
 				}
