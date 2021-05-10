@@ -46,7 +46,7 @@ var (
 	rxLazyImageSrc         = regexp.MustCompile(`(?i)^\s*\S+\.(jpg|jpeg|png|webp)\S*\s*$`)
 	rxImgExtensions        = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)`)
 	rxSrcsetURL            = regexp.MustCompile(`(?i)(\S+)(\s+[\d.]+[xw])?(\s*(?:,|$))`)
-	rxB64DataURL           = regexp.MustCompile(`(?i)^data:\s*([^\s;,]+)\s*;\s*base64\s*`)
+	rxB64DataURL           = regexp.MustCompile(`(?i)^data:\s*([^\s;,]+)\s*;\s*base64\s*,`)
 )
 
 // Constants that used by readability.
@@ -1665,20 +1665,19 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 		nodeTag := dom.TagName(elem)
 		nodeClass := dom.ClassName(elem)
 
-		// In some sites (e.g. Kotaku), they put 1px square image as data uri in
-		// the src attribute. So, here we check if the data uri is too short,
-		// just might as well remove it.
+		// In some sites (e.g. Kotaku), they put 1px square image as base64 data uri in
+		// the src attribute. So, here we check if the data uri is too short, just might
+		// as well remove it.
 		if src != "" && rxB64DataURL.MatchString(src) {
-			// Make sure it's not SVG, because SVG can have a meaningful image
-			// in under 133 bytes.
+			// Make sure it's not SVG, because SVG can have a meaningful image in
+			// under 133 bytes.
 			parts := rxB64DataURL.FindStringSubmatch(src)
 			if parts[1] == "image/svg+xml" {
 				return
 			}
 
-			// Make sure this element has other attributes which contains
-			// image. If it doesn't, then this src is important and
-			// shouldn't be removed.
+			// Make sure this element has other attributes which contains image.
+			// If it doesn't, then this src is important and shouldn't be removed.
 			srcCouldBeRemoved := false
 			for _, attr := range elem.Attr {
 				if attr.Key == "src" {
