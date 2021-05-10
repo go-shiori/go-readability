@@ -452,10 +452,10 @@ func (ps *Parser) prepDocument() {
 	ps.replaceNodeTags(dom.GetElementsByTagName(doc, "font"), "span")
 }
 
-// nextElement finds the next element, starting from the given node, and
+// nextNode finds the next element, starting from the given node, and
 // ignoring whitespace in between. If the given node is an element, the
 // same node is returned.
-func (ps *Parser) nextElement(node *html.Node) *html.Node {
+func (ps *Parser) nextNode(node *html.Node) *html.Node {
 	next := node
 	for next != nil && next.Type != html.ElementNode && rxWhitespace.MatchString(dom.TextContent(next)) {
 		next = next.NextSibling
@@ -480,7 +480,7 @@ func (ps *Parser) replaceBrs(elem *html.Node) {
 		// element or non-whitespace. This leaves behind the first <br>
 		// in the chain (which will be replaced with a <p> later).
 		for {
-			next = ps.nextElement(next)
+			next = ps.nextNode(next)
 			if next == nil || dom.TagName(next) != "br" {
 				break
 			}
@@ -502,7 +502,7 @@ func (ps *Parser) replaceBrs(elem *html.Node) {
 			for next != nil {
 				// If we've hit another <br><br>, we're done adding children to this <p>.
 				if dom.TagName(next) == "br" {
-					nextElem := ps.nextElement(next.NextSibling)
+					nextElem := ps.nextNode(next.NextSibling)
 					if nextElem != nil && dom.TagName(nextElem) == "br" {
 						break
 					}
@@ -618,7 +618,7 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	})
 
 	ps.forEachNode(dom.GetElementsByTagName(articleContent, "br"), func(br *html.Node, _ int) {
-		next := ps.nextElement(br.NextSibling)
+		next := ps.nextNode(br.NextSibling)
 		if next != nil && dom.TagName(next) == "p" {
 			br.Parent.RemoveChild(br)
 		}
