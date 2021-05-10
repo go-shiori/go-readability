@@ -792,6 +792,7 @@ func (ps *Parser) grabArticle() *html.Node {
 				if rxUnlikelyCandidates.MatchString(matchString) &&
 					!rxOkMaybeItsACandidate.MatchString(matchString) &&
 					!ps.hasAncestorTag(node, "table", 3, nil) &&
+					!ps.hasAncestorTag(node, "code", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
 					node = ps.removeAndGetNext(node)
 					continue
@@ -1926,6 +1927,10 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 
 		// Next check if we're inside a data table, in which case don't remove it as well.
 		if ps.hasAncestorTag(node, "table", -1, ps.isReadabilityDataTable) {
+			return false
+		}
+
+		if ps.hasAncestorTag(node, "code", 3, nil) {
 			return false
 		}
 
