@@ -33,8 +33,7 @@
                         <p>The most useful, high-level part of the Fetch API is the <code>fetch()</code> function.
                             In its simplest form it takes a URL and returns a promise that resolves
                             to the response. The response is captured as a <code>Response</code> object.</p>
-                        <div>
-                            <div><pre>fetch<span>(</span><span>&#34;/data.json&#34;</span><span>)</span>.<span>then</span><span>(</span><span>function</span><span>(</span>res<span>)</span> <span>{</span>
+                        <div><pre>fetch<span>(</span><span>&#34;/data.json&#34;</span><span>)</span>.<span>then</span><span>(</span><span>function</span><span>(</span>res<span>)</span> <span>{</span>
   <span>// res instanceof Response == true.</span>
   <span>if</span> <span>(</span>res.<span>ok</span><span>)</span> <span>{</span>
     res.<span>json</span><span>(</span><span>)</span>.<span>then</span><span>(</span><span>function</span><span>(</span>data<span>)</span> <span>{</span>
@@ -47,10 +46,8 @@
   console.<span>log</span><span>(</span><span>&#34;Fetch failed!&#34;</span><span>,</span> e<span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                                         </div>
-            </div>
             <p>Submitting some parameters, it would look like this:</p>
-            <div>
-                <div><pre>fetch<span>(</span><span>&#34;http://www.example.org/submit.php&#34;</span><span>,</span> <span>{</span>
+            <div><pre>fetch<span>(</span><span>&#34;http://www.example.org/submit.php&#34;</span><span>,</span> <span>{</span>
   method<span>:</span> <span>&#34;POST&#34;</span><span>,</span>
   headers<span>:</span> <span>{</span>
     <span>&#34;Content-Type&#34;</span><span>:</span> <span>&#34;application/x-www-form-urlencoded&#34;</span>
@@ -66,7 +63,6 @@
   alert<span>(</span><span>&#34;Error submitting form!&#34;</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>The <code>fetch()</code> function’s arguments are the same as those passed
                 to the
                 <br/>
@@ -84,28 +80,23 @@
                 <br/>supporting CORS rules and ensuring cookies aren’t readable by third parties.</p>
             <p>The <a href="https://fetch.spec.whatwg.org/#headers-class">Headers interface</a> is
                 a simple multi-map of names to values:</p>
-            <div>
-                <div><pre><span>var</span> content <span>=</span> <span>&#34;Hello World&#34;</span><span>;</span>
+            <div><pre><span>var</span> content <span>=</span> <span>&#34;Hello World&#34;</span><span>;</span>
 <span>var</span> reqHeaders <span>=</span> <span>new</span> Headers<span>(</span><span>)</span><span>;</span>
 reqHeaders.<span>append</span><span>(</span><span>&#34;Content-Type&#34;</span><span>,</span> <span>&#34;text/plain&#34;</span>
 reqHeaders.<span>append</span><span>(</span><span>&#34;Content-Length&#34;</span><span>,</span> content.<span>length</span>.<span>toString</span><span>(</span><span>)</span><span>)</span><span>;</span>
 reqHeaders.<span>append</span><span>(</span><span>&#34;X-Custom-Header&#34;</span><span>,</span> <span>&#34;ProcessThisImmediately&#34;</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>The same can be achieved by passing an array of arrays or a JS object
                 literal
                 <br/>to the constructor:</p>
-            <div>
-                <div><pre>reqHeaders <span>=</span> <span>new</span> Headers<span>(</span><span>{</span>
+            <div><pre>reqHeaders <span>=</span> <span>new</span> Headers<span>(</span><span>{</span>
   <span>&#34;Content-Type&#34;</span><span>:</span> <span>&#34;text/plain&#34;</span><span>,</span>
   <span>&#34;Content-Length&#34;</span><span>:</span> content.<span>length</span>.<span>toString</span><span>(</span><span>)</span><span>,</span>
   <span>&#34;X-Custom-Header&#34;</span><span>:</span> <span>&#34;ProcessThisImmediately&#34;</span><span>,</span>
 <span>}</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>The contents can be queried and retrieved:</p>
-            <div>
-                <div><pre>console.<span>log</span><span>(</span>reqHeaders.<span>has</span><span>(</span><span>&#34;Content-Type&#34;</span><span>)</span><span>)</span><span>;</span> <span>// true</span>
+            <div><pre>console.<span>log</span><span>(</span>reqHeaders.<span>has</span><span>(</span><span>&#34;Content-Type&#34;</span><span>)</span><span>)</span><span>;</span> <span>// true</span>
 console.<span>log</span><span>(</span>reqHeaders.<span>has</span><span>(</span><span>&#34;Set-Cookie&#34;</span><span>)</span><span>)</span><span>;</span> <span>// false</span>
 reqHeaders.<span>set</span><span>(</span><span>&#34;Content-Type&#34;</span><span>,</span> <span>&#34;text/html&#34;</span><span>)</span><span>;</span>
 reqHeaders.<span>append</span><span>(</span><span>&#34;X-Custom-Header&#34;</span><span>,</span> <span>&#34;AnotherValue&#34;</span><span>)</span><span>;</span>
@@ -116,7 +107,6 @@ console.<span>log</span><span>(</span>reqHeaders.<span>getAll</span><span>(</spa
 reqHeaders.<span>delete</span><span>(</span><span>&#34;X-Custom-Header&#34;</span><span>)</span><span>;</span>
 console.<span>log</span><span>(</span>reqHeaders.<span>getAll</span><span>(</span><span>&#34;X-Custom-Header&#34;</span><span>)</span><span>)</span><span>;</span> <span>// []</span></pre>
                             </div>
-            </div>
             <p>Some of these operations are only useful in ServiceWorkers, but they provide
             <br/>a much nicer API to Headers.</p>
             <p>Since Headers can be sent in requests, or received in responses, and have
@@ -143,15 +133,13 @@ console.<span>log</span><span>(</span>reqHeaders.<span>getAll</span><span>(</spa
             <p>All of the Headers methods throw TypeError if <code>name</code> is not a
                 <a href="https://fetch.spec.whatwg.org/#concept-header-name">valid HTTP Header name</a>. The mutation operations will throw TypeError
                     if there is an immutable guard. Otherwise they fail silently. For example:</p>
-            <div>
-                <div><pre><span>var</span> res <span>=</span> Response.<span>error</span><span>(</span><span>)</span><span>;</span>
+            <div><pre><span>var</span> res <span>=</span> Response.<span>error</span><span>(</span><span>)</span><span>;</span>
 <span>try</span> <span>{</span>
   res.<span>headers</span>.<span>set</span><span>(</span><span>&#34;Origin&#34;</span><span>,</span> <span>&#34;http://mybank.com&#34;</span><span>)</span><span>;</span>
 <span>}</span> <span>catch</span><span>(</span>e<span>)</span> <span>{</span>
   console.<span>log</span><span>(</span><span>&#34;Cannot pretend to be a bank!&#34;</span><span>)</span><span>;</span>
 <span>}</span></pre>
                             </div>
-        </div>
         
 <h2>Request</h2>
 
@@ -160,29 +148,24 @@ console.<span>log</span><span>(</span>reqHeaders.<span>getAll</span><span>(</spa
             a body, a request mode, credentials and cache hints.</p>
         <p>The simplest Request is of course, just a URL, as you may do to GET a
             resource.</p>
-        <div>
-            <div><pre><span>var</span> req <span>=</span> <span>new</span> Request<span>(</span><span>&#34;/index.html&#34;</span><span>)</span><span>;</span>
+        <div><pre><span>var</span> req <span>=</span> <span>new</span> Request<span>(</span><span>&#34;/index.html&#34;</span><span>)</span><span>;</span>
 console.<span>log</span><span>(</span>req.<span>method</span><span>)</span><span>;</span> <span>// &#34;GET&#34;</span>
 console.<span>log</span><span>(</span>req.<span>url</span><span>)</span><span>;</span> <span>// &#34;http://example.com/index.html&#34;</span></pre>
                         </div>
-        </div>
         <p>You may also pass a Request to the <code>Request()</code> constructor to
             create a copy.
             <br/>(This is not the same as calling the <code>clone()</code> method, which
             is covered in
             <br/>the “Reading bodies” section.).</p>
-        <div>
-            <div><pre><span>var</span> copy <span>=</span> <span>new</span> Request<span>(</span>req<span>)</span><span>;</span>
+        <div><pre><span>var</span> copy <span>=</span> <span>new</span> Request<span>(</span>req<span>)</span><span>;</span>
 console.<span>log</span><span>(</span>copy.<span>method</span><span>)</span><span>;</span> <span>// &#34;GET&#34;</span>
 console.<span>log</span><span>(</span>copy.<span>url</span><span>)</span><span>;</span> <span>// &#34;http://example.com/index.html&#34;</span></pre>
                         </div>
-        </div>
         <p>Again, this form is probably only useful in ServiceWorkers.</p>
         <p>The non-URL attributes of the <code>Request</code> can only be set by passing
             initial
             <br/>values as a second argument to the constructor. This argument is a dictionary.</p>
-        <div>
-            <div><pre><span>var</span> uploadReq <span>=</span> <span>new</span> Request<span>(</span><span>&#34;/uploadImage&#34;</span><span>,</span> <span>{</span>
+        <div><pre><span>var</span> uploadReq <span>=</span> <span>new</span> Request<span>(</span><span>&#34;/uploadImage&#34;</span><span>,</span> <span>{</span>
   method<span>:</span> <span>&#34;POST&#34;</span><span>,</span>
   headers<span>:</span> <span>{</span>
     <span>&#34;Content-Type&#34;</span><span>:</span> <span>&#34;image/png&#34;</span><span>,</span>
@@ -190,7 +173,6 @@ console.<span>log</span><span>(</span>copy.<span>url</span><span>)</span><span>;
   body<span>:</span> <span>&#34;image data&#34;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                         </div>
-            </div>
             <p>The Request’s mode is used to determine if cross-origin requests lead
                 to valid responses, and which properties on the response are readable.
                 Legal mode values are <code>&#34;same-origin&#34;</code>, <code>&#34;no-cors&#34;</code> (default)
@@ -199,15 +181,13 @@ console.<span>log</span><span>(</span>copy.<span>url</span><span>)</span><span>;
                 origin with this mode set, the result is simply an error. You could use
                 this to ensure that
                 <br/>a request is always being made to your origin.</p>
-            <div>
-                <div><pre><span>var</span> arbitraryUrl <span>=</span> document.<span>getElementById</span><span>(</span><span>&#34;url-input&#34;</span><span>)</span>.<span>value</span><span>;</span>
+            <div><pre><span>var</span> arbitraryUrl <span>=</span> document.<span>getElementById</span><span>(</span><span>&#34;url-input&#34;</span><span>)</span>.<span>value</span><span>;</span>
 fetch<span>(</span>arbitraryUrl<span>,</span> <span>{</span> mode<span>:</span> <span>&#34;same-origin&#34;</span> <span>}</span><span>)</span>.<span>then</span><span>(</span><span>function</span><span>(</span>res<span>)</span> <span>{</span>
   console.<span>log</span><span>(</span><span>&#34;Response succeeded?&#34;</span><span>,</span> res.<span>ok</span><span>)</span><span>;</span>
 <span>}</span><span>,</span> <span>function</span><span>(</span>e<span>)</span> <span>{</span>
   console.<span>log</span><span>(</span><span>&#34;Please enter a same-origin URL!&#34;</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>The <code>&#34;no-cors&#34;</code> mode captures what the web platform does by default
                 for scripts you import from CDNs, images hosted on other domains, and so
                 on. First, it prevents the method from being anything other than “HEAD”,
@@ -225,8 +205,7 @@ fetch<span>(</span>arbitraryUrl<span>,</span> <span>{</span> mode<span>:</span> 
                 headers is exposed in the Response, but the body is readable. For example,
                 you could get a list of Flickr’s <a href="https://www.flickr.com/services/api/flickr.interestingness.getList.html">most interesting</a> photos
                 today like this:</p>
-            <div>
-                <div><pre><span>var</span> u <span>=</span> <span>new</span> URLSearchParams<span>(</span><span>)</span><span>;</span>
+            <div><pre><span>var</span> u <span>=</span> <span>new</span> URLSearchParams<span>(</span><span>)</span><span>;</span>
 u.<span>append</span><span>(</span><span>&#39;method&#39;</span><span>,</span> <span>&#39;flickr.interestingness.getList&#39;</span><span>)</span><span>;</span>
 u.<span>append</span><span>(</span><span>&#39;api_key&#39;</span><span>,</span> <span>&#39;&lt;insert api key here&gt;&#39;</span><span>)</span><span>;</span>
 u.<span>append</span><span>(</span><span>&#39;format&#39;</span><span>,</span> <span>&#39;json&#39;</span><span>)</span><span>;</span>
@@ -245,15 +224,12 @@ apiCall.<span>then</span><span>(</span><span>function</span><span>(</span>respon
   <span>}</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>You may not read out the “Date” header since Flickr does not allow it
                 via
                 <br/>
 <code>Access-Control-Expose-Headers</code>.</p>
-            <div>
-                <div><pre>response.<span>headers</span>.<span>get</span><span>(</span><span>&#34;Date&#34;</span><span>)</span><span>;</span> <span>// null</span></pre>
+            <div><pre>response.<span>headers</span>.<span>get</span><span>(</span><span>&#34;Date&#34;</span><span>)</span><span>;</span> <span>// null</span></pre>
                             </div>
-            </div>
             <p>The <code>credentials</code> enumeration determines if cookies for the other
                 domain are
                 <br/>sent to cross-origin requests. This is similar to XHR’s <code>withCredentials</code>
@@ -308,14 +284,12 @@ apiCall.<span>then</span><span>(</span><span>function</span><span>(</span>respon
                 The
                 <br/>idiomatic way to return a Response to an intercepted request in ServiceWorkers
                 is:</p>
-            <div>
-                <div><pre>addEventListener<span>(</span><span>&#39;fetch&#39;</span><span>,</span> <span>function</span><span>(</span>event<span>)</span> <span>{</span>
+            <div><pre>addEventListener<span>(</span><span>&#39;fetch&#39;</span><span>,</span> <span>function</span><span>(</span>event<span>)</span> <span>{</span>
   event.<span>respondWith</span><span>(</span><span>new</span> Response<span>(</span><span>&#34;Response body&#34;</span><span>,</span> <span>{</span>
     headers<span>:</span> <span>{</span> <span>&#34;Content-Type&#34;</span> <span>:</span> <span>&#34;text/plain&#34;</span> <span>}</span>
   <span>}</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                             </div>
-            </div>
             <p>As you can see, Response has a two argument constructor, where both arguments
                 are optional. The first argument is a body initializer, and the second
                 is a dictionary to set the <code>status</code>, <code>statusText</code> and <code>headers</code>.</p>
@@ -363,20 +337,16 @@ apiCall.<span>then</span><span>(</span><span>function</span><span>(</span>respon
             <p>This is a significant improvement over XHR in terms of ease of use of
                 non-text data!</p>
             <p>Request bodies can be set by passing <code>body</code> parameters:</p>
-            <div>
-                <div><pre><span>var</span> form <span>=</span> <span>new</span> FormData<span>(</span>document.<span>getElementById</span><span>(</span><span>&#39;login-form&#39;</span><span>)</span><span>)</span><span>;</span>
+            <div><pre><span>var</span> form <span>=</span> <span>new</span> FormData<span>(</span>document.<span>getElementById</span><span>(</span><span>&#39;login-form&#39;</span><span>)</span><span>)</span><span>;</span>
 fetch<span>(</span><span>&#34;/login&#34;</span><span>,</span> <span>{</span>
   method<span>:</span> <span>&#34;POST&#34;</span><span>,</span>
   body<span>:</span> form
 <span>}</span><span>)</span></pre>
                             </div>
-                </div>
                 <p>Responses take the first argument as the body.</p>
-                <div>
-                    <div><pre><span>var</span> res <span>=</span> <span>new</span> Response<span>(</span><span>new</span> File<span>(</span><span>[</span><span>&#34;chunk&#34;</span><span>,</span> <span>&#34;chunk&#34;</span><span>]</span><span>,</span> <span>&#34;archive.zip&#34;</span><span>,</span>
+                <div><pre><span>var</span> res <span>=</span> <span>new</span> Response<span>(</span><span>new</span> File<span>(</span><span>[</span><span>&#34;chunk&#34;</span><span>,</span> <span>&#34;chunk&#34;</span><span>]</span><span>,</span> <span>&#34;archive.zip&#34;</span><span>,</span>
                        <span>{</span> type<span>:</span> <span>&#34;application/zip&#34;</span> <span>}</span><span>)</span><span>)</span><span>;</span></pre>
                                 </div>
-                </div>
                 <p>Both Request and Response (and by extension the <code>fetch()</code> function),
                     will try to intelligently <a href="https://fetch.spec.whatwg.org/#concept-bodyinit-extract">determine the content type</a>.
                     Request will also automatically set a “Content-Type” header if none is
@@ -387,8 +357,7 @@ fetch<span>(</span><span>&#34;/login&#34;</span><span>,</span> <span>{</span>
                 <p>It is important to realise that Request and Response bodies can only be
                     read once! Both interfaces have a boolean attribute <code>bodyUsed</code> to
                     determine if it is safe to read or not.</p>
-                <div>
-                    <div><pre><span>var</span> res <span>=</span> <span>new</span> Response<span>(</span><span>&#34;one time use&#34;</span><span>)</span><span>;</span>
+                <div><pre><span>var</span> res <span>=</span> <span>new</span> Response<span>(</span><span>&#34;one time use&#34;</span><span>)</span><span>;</span>
 console.<span>log</span><span>(</span>res.<span>bodyUsed</span><span>)</span><span>;</span> <span>// false</span>
 res.<span>text</span><span>(</span><span>)</span>.<span>then</span><span>(</span><span>function</span><span>(</span>v<span>)</span> <span>{</span>
   console.<span>log</span><span>(</span>res.<span>bodyUsed</span><span>)</span><span>;</span> <span>// true</span>
@@ -399,7 +368,6 @@ res.<span>text</span><span>(</span><span>)</span>.<span>catch</span><span>(</spa
   console.<span>log</span><span>(</span><span>&#34;Tried to read already consumed Response&#34;</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                                 </div>
-                </div>
                 <p>This decision allows easing the transition to an eventual <a href="https://streams.spec.whatwg.org/">stream-based</a> Fetch
                     API. The intention is to let applications consume data as it arrives, allowing
                     for JavaScript to deal with larger files like videos, and perform things
@@ -413,8 +381,7 @@ res.<span>text</span><span>(</span><span>)</span>.<span>catch</span><span>(</spa
                     will return a clone of the object, with a ‘new’ body. <code>clone()</code> MUST
                     be called before the body of the corresponding object has been used. That
                     is, <code>clone()</code> first, read later.</p>
-                <div>
-                    <div><pre>addEventListener<span>(</span><span>&#39;fetch&#39;</span><span>,</span> <span>function</span><span>(</span>evt<span>)</span> <span>{</span>
+                <div><pre>addEventListener<span>(</span><span>&#39;fetch&#39;</span><span>,</span> <span>function</span><span>(</span>evt<span>)</span> <span>{</span>
   <span>var</span> sheep <span>=</span> <span>new</span> Response<span>(</span><span>&#34;Dolly&#34;</span><span>)</span><span>;</span>
   console.<span>log</span><span>(</span>sheep.<span>bodyUsed</span><span>)</span><span>;</span> <span>// false</span>
   <span>var</span> clone <span>=</span> sheep.<span>clone</span><span>(</span><span>)</span><span>;</span>
@@ -429,7 +396,6 @@ res.<span>text</span><span>(</span><span>)</span>.<span>catch</span><span>(</spa
   <span>}</span><span>)</span><span>;</span>
 <span>}</span><span>)</span><span>;</span></pre>
                                 </div>
-                </div>
                 
 <h2>Future improvements</h2>
 

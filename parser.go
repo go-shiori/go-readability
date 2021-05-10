@@ -146,6 +146,8 @@ func (ps *Parser) postProcessContent(articleContent *html.Node) {
 	// Readability cannot open relative uris so we convert them to absolute uris.
 	ps.fixRelativeURIs(articleContent)
 
+	ps.simplifyNestedElements(articleContent)
+
 	// Remove classes.
 	if !ps.KeepClasses {
 		ps.cleanClasses(articleContent)
@@ -322,6 +324,36 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 			dom.SetAttribute(media, "srcset", newSrcset)
 		}
 	})
+}
+
+func (ps *Parser) simplifyNestedElements(articleContent *html.Node) {
+	node := articleContent
+
+	for node != nil {
+		nodeID := dom.ID(node)
+		nodeTagName := dom.TagName(node)
+
+		if node.Parent != nil && (nodeTagName == "div" || nodeTagName == "section") &&
+			!strings.HasPrefix(nodeID, "readability") {
+			if ps.isElementWithoutContent(node) {
+				node = ps.removeAndGetNext(node)
+				continue
+			}
+
+			if ps.hasSingleTagInsideElement(node, "div") || ps.hasSingleTagInsideElement(node, "section") {
+				child := dom.Children(node)[0]
+				for _, attr := range node.Attr {
+					dom.SetAttribute(child, attr.Key, attr.Val)
+				}
+
+				dom.ReplaceChild(node.Parent, child, node)
+				node = child
+				continue
+			}
+		}
+
+		node = ps.getNextNode(node, false)
+	}
 }
 
 // getArticleTitle attempts to get the article title.
@@ -844,7 +876,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			}
 
 			// Exclude nodes with no ancestor.
-			ancestors := ps.getNodeAncestors(elementToScore, 3)
+			ancestors := ps.getNodeAncestors(elementToScore, 5)
 			if len(ancestors) == 0 {
 				return
 			}
