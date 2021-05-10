@@ -22,7 +22,7 @@ var (
 	rxUnlikelyCandidates   = regexp.MustCompile(`(?i)-ad-|ai2html|banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|footer|gdpr|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
 	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|content|main|shadow`)
 	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
-	rxNegative             = regexp.MustCompile(`(?i)hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
+	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
 	rxExtraneous           = regexp.MustCompile(`(?i)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
 	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
 	rxReplaceFonts         = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
@@ -32,6 +32,7 @@ var (
 	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
+	rxHashURL              = regexp.MustCompile(`(?i)^#.+`)
 	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name|image\S*)\s*`)
 	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
@@ -1615,12 +1616,21 @@ func (ps *Parser) getLinkDensity(element *html.Node) float64 {
 		return 0
 	}
 
-	linkLength := 0
+	var linkLength float64
 	ps.forEachNode(dom.GetElementsByTagName(element, "a"), func(linkNode *html.Node, _ int) {
-		linkLength += charCount(ps.getInnerText(linkNode, true))
+		href := dom.GetAttribute(linkNode, "href")
+		href = strings.TrimSpace(href)
+
+		coefficient := 1.0
+		if href != "" && rxHashURL.MatchString(href) {
+			coefficient = 0.3
+		}
+
+		nodeLength := charCount(ps.getInnerText(linkNode, true))
+		linkLength += float64(nodeLength) * coefficient
 	})
 
-	return float64(linkLength) / float64(textLength)
+	return linkLength / float64(textLength)
 }
 
 // getClassWeight gets an elements class/id weight. Uses regular
@@ -1892,8 +1902,6 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 		return
 	}
 
-	isList := tag == "ul" || tag == "ol"
-
 	// Gather counts for other typical elements embedded within.
 	// Traverse backwards so we can remove nodes at the same time
 	// without effecting the traversal.
@@ -1902,6 +1910,18 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 		// First check if this node IS data table, in which case don't remove it.
 		if tag == "table" && ps.isReadabilityDataTable(node) {
 			return false
+		}
+
+		isList := tag == "ul" || tag == "ol"
+		if !isList {
+			var listLength int
+			listNodes := ps.getAllNodesWithTag(node, "ul", "ol")
+			ps.forEachNode(listNodes, func(list *html.Node, _ int) {
+				listLength += charCount(ps.getInnerText(list, true))
+			})
+
+			nodeLength := charCount(ps.getInnerText(node, true))
+			isList = float64(listLength)/float64(nodeLength) > 0.9
 		}
 
 		// Next check if we're inside a data table, in which case don't remove it as well.
