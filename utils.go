@@ -91,3 +91,13 @@ func parseHTMLString(str string) (*html.Node, error) {
 	body := dom.GetElementsByTagName(doc, "body")[0]
 	return body, nil
 }
+
+// strOr returns the first not empty string in args.
+func strOr(args ...string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] != "" {
+			return args[i]
+		}
+	}
+	return ""
+}

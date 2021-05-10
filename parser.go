@@ -1,6 +1,7 @@
 package readability
 
 import (
+	"encoding/json"
 	"fmt"
 	shtml "html"
 	"io"
@@ -47,6 +48,9 @@ var (
 	rxImgExtensions        = regexp.MustCompile(`(?i)\.(jpg|jpeg|png|webp)`)
 	rxSrcsetURL            = regexp.MustCompile(`(?i)(\S+)(\s+[\d.]+[xw])?(\s*(?:,|$))`)
 	rxB64DataURL           = regexp.MustCompile(`(?i)^data:\s*([^\s;,]+)\s*;\s*base64\s*,`)
+	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
+	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
+	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org$`)
 )
 
 // Constants that used by readability.
@@ -109,6 +113,9 @@ type Parser struct {
 	TagsToScore []string
 	// Debug determines if the log should be printed or not. Default: false.
 	Debug bool
+	// DisableJSONLD determines if metadata in JSON+LD will be extracted
+	// or not. Default: false.
+	DisableJSONLD bool
 
 	doc             *html.Node
 	documentURI     *nurl.URL
@@ -175,6 +182,17 @@ func (ps *Parser) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 	for i := 0; i < len(nodeList); i++ {
 		fn(nodeList[i], i)
 	}
+}
+
+// findNode iterates over a NodeList and return the first node that passes
+// the supplied test function.
+func (ps *Parser) findNode(nodeList []*html.Node, fn func(*html.Node) bool) *html.Node {
+	for i := 0; i < len(nodeList); i++ {
+		if fn(nodeList[i]) {
+			return nodeList[i]
+		}
+	}
+	return nil
 }
 
 // someNode iterates over a NodeList, return true if any of the
@@ -1161,9 +1179,97 @@ func (ps *Parser) isValidByline(byline string) bool {
 	return nChar > 0 && nChar < 100
 }
 
+// getJSONLD try to extract metadata from JSON-LD object.
+// For now, only Schema.org objects of type Article or its subtypes are supported.
+func (ps *Parser) getJSONLD() (map[string]string, error) {
+	// Find and extract <script> with type "application/ld+json"
+	scripts := ps.getAllNodesWithTag(ps.doc, "script")
+	jsonLdElement := ps.findNode(scripts, func(n *html.Node) bool {
+		return dom.GetAttribute(n, "type") == "application/ld+json"
+	})
+
+	if jsonLdElement == nil {
+		return nil, nil
+	}
+
+	// Strip CDATA markers if present
+	content := rxCDATA.ReplaceAllString(dom.TextContent(jsonLdElement), "")
+
+	// Decode JSON
+	var parsed map[string]interface{}
+	err := json.Unmarshal([]byte(content), &parsed)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check context
+	strContext, isString := parsed["@context"].(string)
+	if !isString || !rxSchemaOrg.MatchString(strContext) {
+		return nil, nil
+	}
+
+	// If parsed doesn't have any @type, find it in its graph list
+	if _, typeExist := parsed["@type"]; !typeExist {
+		graphList, isArray := parsed["@graph"].([]interface{})
+		if !isArray {
+			return nil, nil
+		}
+
+		for _, graph := range graphList {
+			objGraph, isObj := graph.(map[string]interface{})
+			if !isObj {
+				continue
+			}
+
+			strType, isString := objGraph["@type"].(string)
+			if isString && rxJsonLdArticleTypes.MatchString(strType) {
+				parsed = objGraph
+				break
+			}
+		}
+	}
+
+	// Once again, make sure parsed has valid @type
+	strType, isString := parsed["@type"].(string)
+	if !isString || !rxJsonLdArticleTypes.MatchString(strType) {
+		return nil, nil
+	}
+
+	// Fetch metadata
+	metadata := make(map[string]string)
+
+	// Title
+	if name, isString := parsed["name"].(string); isString {
+		metadata["title"] = strings.TrimSpace(name)
+	} else if headline, isString := parsed["headline"].(string); isString {
+		metadata["title"] = strings.TrimSpace(headline)
+	}
+
+	// Author
+	if objAuthor, isObj := parsed["author"].(map[string]interface{}); isObj {
+		if name, isString := objAuthor["name"].(string); isString {
+			metadata["byline"] = strings.TrimSpace(name)
+		}
+	}
+
+	// Description
+	if description, isString := parsed["description"].(string); isString {
+		metadata["excerpt"] = strings.TrimSpace(description)
+	}
+
+	// Publisher
+	if objPublisher, isObj := parsed["publisher"].(map[string]interface{}); isObj {
+		if name, isString := objPublisher["name"].(string); isString {
+			metadata["siteName"] = strings.TrimSpace(name)
+		}
+	}
+
+	return metadata, nil
+}
+
 // getArticleMetadata attempts to get excerpt and byline
 // metadata for the article.
-func (ps *Parser) getArticleMetadata() map[string]string {
+func (ps *Parser) getArticleMetadata(jsonLd map[string]string) map[string]string {
 	values := make(map[string]string)
 	metaElements := dom.GetElementsByTagName(ps.doc, "meta")
 
@@ -1201,56 +1307,46 @@ func (ps *Parser) getArticleMetadata() map[string]string {
 	})
 
 	// get title
-	metadataTitle := ""
-	possibleAttrNames := []string{
-		"dc:title", "dcterm:title", "og:title", "weibo:article:title",
-		"weibo:webpage:title", "title", "twitter:title"}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok {
-			metadataTitle = value
-			break
-		}
-	}
+	metadataTitle := strOr(
+		jsonLd["title"],
+		values["dc:title"],
+		values["dcterm:title"],
+		values["og:title"],
+		values["weibo:article:title"],
+		values["weibo:webpage:title"],
+		values["title"],
+		values["twitter:title"])
 
 	if metadataTitle == "" {
 		metadataTitle = ps.getArticleTitle()
 	}
 
 	// get author
-	metadataByline := ""
-	possibleAttrNames = []string{"dc:creator", "dcterm:creator", "author"}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok {
-			metadataByline = value
-			break
-		}
-	}
+	metadataByline := strOr(
+		jsonLd["byline"],
+		values["dc:creator"],
+		values["dcterm:creator"],
+		values["author"])
 
 	// get description
-	metadataExcerpt := ""
-	possibleAttrNames = []string{
-		"dc:description", "dcterm:description", "og:description",
-		"weibo:article:description", "weibo:webpage:description",
-		"description", "twitter:description"}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok {
-			metadataExcerpt = value
-			break
-		}
-	}
+	metadataExcerpt := strOr(
+		jsonLd["excerpt"],
+		values["dc:description"],
+		values["dcterm:description"],
+		values["og:description"],
+		values["weibo:article:description"],
+		values["weibo:webpage:description"],
+		values["description"],
+		values["twitter:description"])
 
 	// get site name
-	metadataSiteName := values["og:site_name"]
+	metadataSiteName := strOr(jsonLd["siteName"], values["og:site_name"])
 
 	// get image thumbnail
-	metadataImage := ""
-	possibleAttrNames = []string{"og:image", "image", "twitter:image"}
-	for _, name := range possibleAttrNames {
-		if value, ok := values[name]; ok {
-			metadataImage = toAbsoluteURI(value, ps.documentURI)
-			break
-		}
-	}
+	metadataImage := strOr(
+		values["og:image"],
+		values["image"],
+		values["twitter:image"])
 
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
@@ -1885,9 +1981,14 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		}
 	}
 
-	// ADDITIONAL, not exist in readability.js
 	// Unwrap image from noscript
 	ps.unwrapNoscriptImages(ps.doc)
+
+	// Extract JSON-LD metadata before removing scripts
+	var jsonLd map[string]string
+	if !ps.DisableJSONLD {
+		jsonLd, _ = ps.getJSONLD()
+	}
 
 	// Remove script tags from the document.
 	ps.removeScripts(ps.doc)
@@ -1896,7 +1997,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	ps.prepDocument()
 
 	// Fetch metadata
-	metadata := ps.getArticleMetadata()
+	metadata := ps.getArticleMetadata(jsonLd)
 	ps.articleTitle = metadata["title"]
 
 	// Try to grab article content
