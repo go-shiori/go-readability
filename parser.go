@@ -1278,10 +1278,25 @@ func (ps *Parser) getJSONLD() (map[string]string, error) {
 	}
 
 	// Author
-	if objAuthor, isObj := parsed["author"].(map[string]interface{}); isObj {
-		if name, isString := objAuthor["name"].(string); isString {
+	switch val := parsed["author"].(type) {
+	case map[string]interface{}:
+		if name, isString := val["name"].(string); isString {
 			metadata["byline"] = strings.TrimSpace(name)
 		}
+
+	case []interface{}:
+		var authors []string
+		for _, author := range val {
+			objAuthor, isObj := author.(map[string]interface{})
+			if !isObj {
+				continue
+			}
+
+			if name, isString := objAuthor["name"].(string); isString {
+				authors = append(authors, strings.TrimSpace(name))
+			}
+		}
+		metadata["byline"] = strings.Join(authors, ", ")
 	}
 
 	// Description
