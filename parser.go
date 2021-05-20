@@ -1,19 +1,29 @@
 package readability
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	shtml "html"
 	"io"
+	"io/ioutil"
 	"math"
 	nurl "net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 // All of the regular expressions in use within readability.
@@ -52,6 +62,7 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org$`)
+	rxCharset              = regexp.MustCompile(`(?i)charset\s*=\s*([^;\s"]+)`)
 )
 
 // Constants that used by readability.
@@ -2046,7 +2057,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	}
 
 	// Parse input
-	ps.doc, err = html.Parse(input)
+	ps.doc, err = parseHTMLDocument(input)
 	if err != nil {
 		return Article{}, fmt.Errorf("failed to parse input: %v", err)
 	}
@@ -2139,7 +2150,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 // this method is located in `Readability-readable.js`.
 func (ps *Parser) IsReadable(input io.Reader) bool {
 	// Parse input
-	doc, err := html.Parse(input)
+	doc, err := parseHTMLDocument(input)
 	if err != nil {
 		return false
 	}
@@ -2223,6 +2234,112 @@ func (ps *Parser) IsReadable(input io.Reader) bool {
 // written in JS which is a dynamic language, while this
 // package is written in Go, which is static.
 // =========================================================
+
+func isSoftHyphen(r rune) bool {
+	return r == '\u00AD'
+}
+
+func containsErrorRune(bt []byte) bool {
+	return bytes.ContainsRune(bt, utf8.RuneError)
+}
+
+// normalizeReaderEncoding convert text encoding from NFD to NFC.
+// It also remove soft hyphen since apparently it's useless in web.
+// See: https://web.archive.org/web/19990117011731/http://www.hut.fi/~jkorpela/shy.html
+func normalizeReaderEncoding(r io.Reader) io.Reader {
+	transformer := transform.Chain(norm.NFD, runes.Remove(runes.Predicate(isSoftHyphen)), norm.NFC)
+	return transform.NewReader(r, transformer)
+}
+
+// parseHTMLDocument parses a reader and try to convert the character encoding into UTF-8.
+func parseHTMLDocument(r io.Reader) (*html.Node, error) {
+	// Check if there is invalid character.
+	r, valid := validateRunes(r)
+
+	// If already valid, we can parse and return it.
+	if valid {
+		r = normalizeReaderEncoding(r)
+		return html.Parse(r)
+	}
+
+	// Find the decoder and parse HTML.
+	r, charset := findHtmlCharset(r)
+	r = transform.NewReader(r, charset.NewDecoder())
+	r = normalizeReaderEncoding(r)
+	return html.Parse(r)
+}
+
+// validateRunes check a reader to make sure all runes inside it is
+// valid UTF-8 character. Since a reader only usable once, here
+// we also return a mirror of the reader.
+func validateRunes(r io.Reader) (io.Reader, bool) {
+	buffer := bytes.NewBuffer(nil)
+	tee := io.TeeReader(r, buffer)
+
+	allValid := true
+	scanner := bufio.NewScanner(tee)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if !utf8.Valid(line) || containsErrorRune(line) {
+			allValid = false
+			break
+		}
+	}
+
+	ioutil.ReadAll(tee)
+	return buffer, allValid
+}
+
+// validateRunes check HTML page in the reader to find charset
+// that used in the HTML page. If none found, we assume it's
+// UTF-8. Since a reader only usable once, here we also return
+// a mirror of the reader.
+func findHtmlCharset(r io.Reader) (io.Reader, encoding.Encoding) {
+	// Prepare mirror
+	buffer := bytes.NewBuffer(nil)
+	tee := io.TeeReader(r, buffer)
+
+	// Parse HTML normally
+	doc, err := html.Parse(tee)
+	if err != nil {
+		return buffer, unicode.UTF8
+	}
+
+	// Look for charset in <meta> elements
+	var customCharset string
+	for _, meta := range dom.GetElementsByTagName(doc, "meta") {
+		// Look in charset
+		charsetAttr := dom.GetAttribute(meta, "charset")
+		if charsetAttr != "" {
+			customCharset = strings.TrimSpace(charsetAttr)
+			break
+		}
+
+		// Look in http-equiv="Content-Type"
+		content := dom.GetAttribute(meta, "content")
+		httpEquiv := dom.GetAttribute(meta, "http-equiv")
+		if httpEquiv == "Content-Type" && content != "" {
+			matches := rxCharset.FindStringSubmatch(content)
+			if len(matches) > 0 {
+				customCharset = matches[1]
+				break
+			}
+		}
+	}
+
+	// If there are no custom charset specified, assume it's utf-8
+	if customCharset == "" {
+		return buffer, unicode.UTF8
+	}
+
+	// Find the encoder
+	e, _ := charset.Lookup(customCharset)
+	if e == nil {
+		e = unicode.UTF8
+	}
+
+	return buffer, e
+}
 
 // getArticleFavicon attempts to get high quality favicon
 // that used in article. It will only pick favicon in PNG

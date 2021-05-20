@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/go-shiori/dom"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
@@ -80,16 +79,6 @@ func renderToFile(element *html.Node, filename string) {
 	}
 	defer dstFile.Close()
 	html.Render(dstFile, element)
-}
-
-func parseHTMLString(str string) (*html.Node, error) {
-	doc, err := html.Parse(strings.NewReader(str))
-	if err != nil {
-		return nil, err
-	}
-
-	body := dom.GetElementsByTagName(doc, "body")[0]
-	return body, nil
 }
 
 // strOr returns the first not empty string in args.
