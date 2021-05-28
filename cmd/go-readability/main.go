@@ -99,18 +99,18 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 func getContent(srcPath string, metadataOnly bool) (string, error) {
 	// Open or fetch web page that will be parsed
 	var (
-		pageURL   string
+		pageURL   *nurl.URL
 		srcReader io.Reader
 	)
 
-	if isURL(srcPath) {
+	if url, isURL := validateURL(srcPath); isURL {
 		resp, err := http.Get(srcPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch web page: %v", err)
 		}
 		defer resp.Body.Close()
 
-		pageURL = srcPath
+		pageURL = url
 		srcReader = resp.Body
 	} else {
 		srcFile, err := os.Open(srcPath)
@@ -119,7 +119,7 @@ func getContent(srcPath string, metadataOnly bool) (string, error) {
 		}
 		defer srcFile.Close()
 
-		pageURL = "http://fakehost.com"
+		pageURL, _ = nurl.ParseRequestURI("http://fakehost.com")
 		srcReader = srcFile
 	}
 
@@ -159,7 +159,7 @@ func getContent(srcPath string, metadataOnly bool) (string, error) {
 	return article.Content, nil
 }
 
-func isURL(path string) bool {
+func validateURL(path string) (*nurl.URL, bool) {
 	url, err := nurl.ParseRequestURI(path)
-	return err == nil && strings.HasPrefix(url.Scheme, "http")
+	return url, err == nil && strings.HasPrefix(url.Scheme, "http")
 }

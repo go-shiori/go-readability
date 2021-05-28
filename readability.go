@@ -21,7 +21,7 @@ import (
 // FromReader parses input from an `io.Reader` and returns the
 // readable content. It's the wrapper for `Parser.Parse()` and useful
 // if you only want to use the default parser.
-func FromReader(input io.Reader, pageURL string) (Article, error) {
+func FromReader(input io.Reader, pageURL *nurl.URL) (Article, error) {
 	parser := NewParser()
 	return parser.Parse(input, pageURL)
 }
@@ -38,7 +38,7 @@ func IsReadable(input io.Reader) bool {
 // readable, then parses the response to find the readable content.
 func FromURL(pageURL string, timeout time.Duration) (Article, error) {
 	// Make sure URL is valid
-	_, err := nurl.ParseRequestURI(pageURL)
+	parsedURL, err := nurl.ParseRequestURI(pageURL)
 	if err != nil {
 		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
 	}
@@ -67,5 +67,5 @@ func FromURL(pageURL string, timeout time.Duration) (Article, error) {
 	}
 
 	// Parse content
-	return parser.Parse(&buffer, pageURL)
+	return parser.Parse(&buffer, parsedURL)
 }

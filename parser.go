@@ -2036,12 +2036,13 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 }
 
 // Parse parses input and find the main readable content.
-func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
+func (ps *Parser) Parse(input io.Reader, pageURL *nurl.URL) (Article, error) {
 	// Reset parser data
 	ps.articleTitle = ""
 	ps.articleByline = ""
 	ps.articleDir = ""
 	ps.articleSiteName = ""
+	ps.documentURI = pageURL
 	ps.attempts = []parseAttempt{}
 	ps.flags = flags{
 		stripUnlikelys:     true,
@@ -2049,14 +2050,8 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 		cleanConditionally: true,
 	}
 
-	// Parse page url
-	var err error
-	ps.documentURI, err = nurl.ParseRequestURI(pageURL)
-	if err != nil {
-		return Article{}, fmt.Errorf("failed to parse URL: %v", err)
-	}
-
 	// Parse input
+	var err error
 	ps.doc, err = parseHTMLDocument(input)
 	if err != nil {
 		return Article{}, fmt.Errorf("failed to parse input: %v", err)
@@ -2127,7 +2122,7 @@ func (ps *Parser) Parse(input io.Reader, pageURL string) (Article, error) {
 	// go-readability special:
 	// Internet is dangerous and weird, and sometimes we will find
 	// metadata isn't encoded using a valid Utf-8, so here we check it.
-	validTitle := strings.ToValidUTF8(ps.articleTitle, pageURL)
+	validTitle := strings.ToValidUTF8(ps.articleTitle, pageURL.String())
 	validByline := strings.ToValidUTF8(finalByline, "")
 	validExcerpt := strings.ToValidUTF8(excerpt, "")
 

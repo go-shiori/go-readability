@@ -42,7 +42,7 @@ func isValidURL(s string) bool {
 // However, if uri is prefixed with hash (#), the uri won't be changed.
 func toAbsoluteURI(uri string, base *nurl.URL) string {
 	if uri == "" || base == nil {
-		return ""
+		return uri
 	}
 
 	// If it is hash tag, return as it is

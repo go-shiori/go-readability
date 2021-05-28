@@ -3,6 +3,7 @@ package readability
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	fp "path/filepath"
 	"strings"
@@ -141,7 +142,8 @@ func Test_parser(t *testing.T) {
 			}
 
 			// Get article from test file
-			resultArticle, err := FromReader(testFile, "http://fakehost/test/page.html")
+			parsedURL, _ := url.ParseRequestURI("http://fakehost/test/page.html")
+			resultArticle, err := FromReader(testFile, parsedURL)
 			if err != nil {
 				t1.Errorf("\nfailed to parse test file")
 			}

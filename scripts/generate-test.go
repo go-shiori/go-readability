@@ -101,7 +101,8 @@ func generateTestcase(testName, sourceURL string) error {
 	}
 	defer srcFile.Close()
 
-	article, err := readability.FromReader(srcFile, "http://fakehost/test/page.html")
+	parsedURL, _ := nurl.ParseRequestURI("http://fakehost/test/page.html")
+	article, err := readability.FromReader(srcFile, parsedURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse source: %v", err)
 	}
