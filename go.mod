@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/go-shiori/dom v0.0.0-20210510042244-c74b4cff1404
+	github.com/gogs/chardet v0.0.0-20191104214054-4b6791f73a28
 	github.com/sergi/go-diff v1.1.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.0.0
