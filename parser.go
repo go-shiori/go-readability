@@ -1,12 +1,9 @@
 package readability
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	shtml "html"
-	"io"
-	"io/ioutil"
 	"math"
 	nurl "net/url"
 	"regexp"
@@ -15,13 +12,7 @@ import (
 	"strings"
 
 	"github.com/go-shiori/dom"
-	"github.com/gogs/chardet"
 	"golang.org/x/net/html"
-	"golang.org/x/net/html/charset"
-	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/runes"
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
 )
 
 // All of the regular expressions in use within readability.
@@ -2033,241 +2024,12 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 		(nodeAriaHidden == "" || nodeAriaHidden != "true" || strings.Contains(className, "fallback-image"))
 }
 
-// Parse parses input and find the main readable content.
-func (ps *Parser) Parse(input io.Reader, pageURL *nurl.URL) (Article, error) {
-	// Reset parser data
-	ps.articleTitle = ""
-	ps.articleByline = ""
-	ps.articleDir = ""
-	ps.articleSiteName = ""
-	ps.documentURI = pageURL
-	ps.attempts = []parseAttempt{}
-	ps.flags = flags{
-		stripUnlikelys:     true,
-		useWeightClasses:   true,
-		cleanConditionally: true,
-	}
-
-	// Parse input
-	var err error
-	ps.doc, err = parseHTMLDocument(input)
-	if err != nil {
-		return Article{}, fmt.Errorf("failed to parse input: %v", err)
-	}
-
-	// Avoid parsing too large documents, as per configuration option
-	if ps.MaxElemsToParse > 0 {
-		numTags := len(dom.GetElementsByTagName(ps.doc, "*"))
-		if numTags > ps.MaxElemsToParse {
-			return Article{}, fmt.Errorf("documents too large: %d elements", numTags)
-		}
-	}
-
-	// Unwrap image from noscript
-	ps.unwrapNoscriptImages(ps.doc)
-
-	// Extract JSON-LD metadata before removing scripts
-	var jsonLd map[string]string
-	if !ps.DisableJSONLD {
-		jsonLd, _ = ps.getJSONLD()
-	}
-
-	// Remove script tags from the document.
-	ps.removeScripts(ps.doc)
-
-	// Prepares the HTML document
-	ps.prepDocument()
-
-	// Fetch metadata
-	metadata := ps.getArticleMetadata(jsonLd)
-	ps.articleTitle = metadata["title"]
-
-	// Try to grab article content
-	finalHTMLContent := ""
-	finalTextContent := ""
-	articleContent := ps.grabArticle()
-	var readableNode *html.Node
-
-	if articleContent != nil {
-		ps.postProcessContent(articleContent)
-
-		// If we haven't found an excerpt in the article's metadata,
-		// use the article's first paragraph as the excerpt. This is used
-		// for displaying a preview of the article's content.
-		if metadata["excerpt"] == "" {
-			paragraphs := dom.GetElementsByTagName(articleContent, "p")
-			if len(paragraphs) > 0 {
-				metadata["excerpt"] = strings.TrimSpace(dom.TextContent(paragraphs[0]))
-			}
-		}
-
-		readableNode = dom.FirstElementChild(articleContent)
-		finalHTMLContent = dom.InnerHTML(articleContent)
-		finalTextContent = dom.TextContent(articleContent)
-		finalTextContent = strings.TrimSpace(finalTextContent)
-	}
-
-	finalByline := metadata["byline"]
-	if finalByline == "" {
-		finalByline = ps.articleByline
-	}
-
-	// Excerpt is an supposed to be short and concise,
-	// so it shouldn't have any new line
-	excerpt := strings.TrimSpace(metadata["excerpt"])
-	excerpt = strings.Join(strings.Fields(excerpt), " ")
-
-	// go-readability special:
-	// Internet is dangerous and weird, and sometimes we will find
-	// metadata isn't encoded using a valid Utf-8, so here we check it.
-	var replacementTitle string
-	if pageURL != nil {
-		replacementTitle = pageURL.String()
-	}
-
-	validTitle := strings.ToValidUTF8(ps.articleTitle, replacementTitle)
-	validByline := strings.ToValidUTF8(finalByline, "")
-	validExcerpt := strings.ToValidUTF8(excerpt, "")
-
-	return Article{
-		Title:       validTitle,
-		Byline:      validByline,
-		Node:        readableNode,
-		Content:     finalHTMLContent,
-		TextContent: finalTextContent,
-		Length:      charCount(finalTextContent),
-		Excerpt:     validExcerpt,
-		SiteName:    metadata["siteName"],
-		Image:       metadata["image"],
-		Favicon:     metadata["favicon"],
-	}, nil
-}
-
-// IsReadable decides whether or not the document is reader-able
-// without parsing the whole thing. In `mozilla/readability`,
-// this method is located in `Readability-readable.js`.
-func (ps *Parser) IsReadable(input io.Reader) bool {
-	// Parse input
-	doc, err := parseHTMLDocument(input)
-	if err != nil {
-		return false
-	}
-
-	// Get <p> and <pre> nodes.
-	// Also get <div> nodes which have <br> node(s) and append
-	// them into the `nodes` variable.
-	// Some articles' DOM structures might look like :
-	//
-	// <div>
-	//     Sentences<br>
-	//     <br>
-	//     Sentences<br>
-	// </div>
-	//
-	// So we need to make sure only fetch the div once.
-	// To do so, we will use map as dictionary.
-	nodeList := make([]*html.Node, 0)
-	nodeDict := make(map[*html.Node]struct{})
-	var finder func(*html.Node)
-
-	finder = func(node *html.Node) {
-		if node.Type == html.ElementNode {
-			tag := dom.TagName(node)
-			if tag == "p" || tag == "pre" {
-				if _, exist := nodeDict[node]; !exist {
-					nodeList = append(nodeList, node)
-					nodeDict[node] = struct{}{}
-				}
-			} else if tag == "br" && node.Parent != nil && dom.TagName(node.Parent) == "div" {
-				if _, exist := nodeDict[node.Parent]; !exist {
-					nodeList = append(nodeList, node.Parent)
-					nodeDict[node.Parent] = struct{}{}
-				}
-			}
-		}
-
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			finder(child)
-		}
-	}
-
-	finder(doc)
-
-	// This is a little cheeky, we use the accumulator 'score'
-	// to decide what to return from this callback.
-	score := float64(0)
-	return ps.someNode(nodeList, func(node *html.Node) bool {
-		if !ps.isProbablyVisible(node) {
-			return false
-		}
-
-		matchString := dom.ClassName(node) + " " + dom.ID(node)
-		if rxUnlikelyCandidates.MatchString(matchString) &&
-			!rxOkMaybeItsACandidate.MatchString(matchString) {
-			return false
-		}
-
-		if dom.TagName(node) == "p" && ps.hasAncestorTag(node, "li", -1, nil) {
-			return false
-		}
-
-		nodeText := strings.TrimSpace(dom.TextContent(node))
-		nodeTextLength := charCount(nodeText)
-		if nodeTextLength < 140 {
-			return false
-		}
-
-		score += math.Sqrt(float64(nodeTextLength - 140))
-		if score > 20 {
-			return true
-		}
-
-		return false
-	})
-}
-
 // ====================== INFORMATION ======================
 // Methods below these point are not exist in Readability.js.
 // They are only used as workaround since Readability.js is
 // written in JS which is a dynamic language, while this
 // package is written in Go, which is static.
 // =========================================================
-
-// normalizeTextEncoding convert text encoding from NFD to NFC.
-// It also remove soft hyphen since apparently it's useless in web.
-// See: https://web.archive.org/web/19990117011731/http://www.hut.fi/~jkorpela/shy.html
-func normalizeTextEncoding(r io.Reader) io.Reader {
-	fnSoftHyphen := func(r rune) bool { return r == '\u00AD' }
-	softHyphenSet := runes.Predicate(fnSoftHyphen)
-	transformer := transform.Chain(norm.NFD, runes.Remove(softHyphenSet), norm.NFC)
-	return transform.NewReader(r, transformer)
-}
-
-// parseHTMLDocument parses a reader and try to convert the character encoding into UTF-8.
-func parseHTMLDocument(r io.Reader) (*html.Node, error) {
-	// Split the reader using tee
-	content, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
-	// Detect page encoding
-	res, err := chardet.NewHtmlDetector().DetectBest(content)
-	if err != nil {
-		return nil, err
-	}
-
-	pageEncoding, _ := charset.Lookup(res.Charset)
-	if pageEncoding == nil {
-		pageEncoding = unicode.UTF8
-	}
-
-	// Parse HTML using the page encoding
-	r = bytes.NewReader(content)
-	r = transform.NewReader(r, pageEncoding.NewDecoder())
-	r = normalizeTextEncoding(r)
-	return html.Parse(r)
-}
 
 // getArticleFavicon attempts to get high quality favicon
 // that used in article. It will only pick favicon in PNG
