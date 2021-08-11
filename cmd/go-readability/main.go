@@ -128,7 +128,7 @@ func getContent(srcPath string, metadataOnly bool) (string, error) {
 	tee := io.TeeReader(srcReader, buf)
 
 	// Make sure the page is readable
-	if !readability.IsReadable(tee) {
+	if !readability.Check(tee) {
 		return "", fmt.Errorf("failed to parse page: the page is not readable")
 	}
 
