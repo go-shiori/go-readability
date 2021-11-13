@@ -159,6 +159,9 @@ func Test_parser(t *testing.T) {
 			if err != nil {
 				t1.Errorf("\n%v", err)
 			}
+			if resultArticle.ModifiedTime != nil {
+				t1.Fatalf("Modified time is %s", resultArticle.ModifiedTime)
+			}
 		})
 	}
 }

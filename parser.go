@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
@@ -94,6 +95,8 @@ type Article struct {
 	SiteName    string
 	Image       string
 	Favicon     string
+	PublishedTime *time.Time
+	ModifiedTime *time.Time
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1315,6 +1318,16 @@ func (ps *Parser) getJSONLD() (map[string]string, error) {
 		}
 	}
 
+	// Date Published
+	if datePublished, isString := parsed["datePublished"].(string); isString {
+		metadata["datePublished"] = strings.TrimSpace(datePublished)
+	}
+
+	// Date Modified
+	if dateModified, isString := parsed["dateModified"].(string); isString {
+		metadata["dateModified"] = strings.TrimSpace(dateModified)
+	}
+
 	return metadata, nil
 }
 
@@ -1402,12 +1415,18 @@ func (ps *Parser) getArticleMetadata(jsonLd map[string]string) map[string]string
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
 
+	metadataDatePublished := strOr(jsonLd["datePublished"], values["dcterms.available"],
+		values["dcterms.created"], values["dcterms.issued"])
+	metadataDateModified := strOr(jsonLd["dateModified"], values["dcterms.modified"])
+
 	// in many sites the meta value is escaped with HTML entities,
 	// so here we need to unescape it
 	metadataTitle = shtml.UnescapeString(metadataTitle)
 	metadataByline = shtml.UnescapeString(metadataByline)
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 	metadataSiteName = shtml.UnescapeString(metadataSiteName)
+	metadataDatePublished = shtml.UnescapeString(metadataDatePublished)
+	metadataDateModified = shtml.UnescapeString(metadataDateModified)
 
 	return map[string]string{
 		"title":    metadataTitle,
@@ -1416,6 +1435,8 @@ func (ps *Parser) getArticleMetadata(jsonLd map[string]string) map[string]string
 		"siteName": metadataSiteName,
 		"image":    metadataImage,
 		"favicon":  metadataFavicon,
+		"datePublished": metadataDatePublished,
+		"dateModified": metadataDateModified,
 	}
 }
 
