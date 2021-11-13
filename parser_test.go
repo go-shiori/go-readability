@@ -252,3 +252,4 @@ func getNodeExcerpt(node *html.Node) string {
 	}
 	return outer[:120]
 }
+

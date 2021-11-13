@@ -5,6 +5,7 @@ import (
 	"io"
 	nurl "net/url"
 	"strings"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
@@ -113,17 +114,50 @@ func (ps *Parser) ParseDocument(doc *html.Node, pageURL *nurl.URL) (Article, err
 	validByline := strings.ToValidUTF8(finalByline, "")
 	validExcerpt := strings.ToValidUTF8(excerpt, "")
 
+	datePublished := ps.getDate(metadata, "datePublished")
+	dateModified := ps.getDate(metadata, "dataModified")
+
 	return Article{
-		Title:       validTitle,
-		Byline:      validByline,
-		Node:        readableNode,
-		Content:     finalHTMLContent,
-		TextContent: finalTextContent,
-		Length:      charCount(finalTextContent),
-		Excerpt:     validExcerpt,
-		SiteName:    metadata["siteName"],
-		Image:       metadata["image"],
-		Favicon:     metadata["favicon"],
-		Language:    ps.articleLang,
+		Title:         validTitle,
+		Byline:        validByline,
+		Node:          readableNode,
+		Content:       finalHTMLContent,
+		TextContent:   finalTextContent,
+		Length:        charCount(finalTextContent),
+		Excerpt:       validExcerpt,
+		SiteName:      metadata["siteName"],
+		Image:         metadata["image"],
+		Favicon:       metadata["favicon"],
+		Language:      ps.articleLang,
+		PublishedTime: datePublished,
+		ModifiedTime:  dateModified,
 	}, nil
+}
+
+func (ps *Parser) getDate(metadata map[string]string, fieldName string) *time.Time {
+	dateStr, ok := metadata[fieldName]
+	if ok && len(dateStr) > 0 {
+		return getParsedDate(dateStr)
+	}
+	return nil
+}
+
+func getParsedDate(dateStr string) *time.Time {
+	// Following formats have been seen in the wild.
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04",
+		"2006-01-02",
+		"2006-01-02T15:04:05.999999999",
+	}
+	for i, format := range formats {
+		parsedDate, err := time.Parse(format, dateStr)
+		if err == nil {
+			return &parsedDate
+		} else if i == len(formats)-1 {
+			fmt.Printf("Failed to parse date \"%s\"\n", dateStr)
+		}
+	}
+	return nil
 }

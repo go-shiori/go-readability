@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
@@ -81,17 +82,19 @@ type parseAttempt struct {
 
 // Article is the final readable content.
 type Article struct {
-	Title       string
-	Byline      string
-	Node        *html.Node
-	Content     string
-	TextContent string
-	Length      int
-	Excerpt     string
-	SiteName    string
-	Image       string
-	Favicon     string
-	Language    string
+	Title         string
+	Byline        string
+	Node          *html.Node
+	Content       string
+	TextContent   string
+	Length        int
+	Excerpt       string
+	SiteName      string
+	Image         string
+	Favicon       string
+	Language      string
+	PublishedTime *time.Time
+	ModifiedTime  *time.Time
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1464,20 +1467,28 @@ func (ps *Parser) getArticleMetadata(jsonLd map[string]string) map[string]string
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
 
+	metadataDatePublished := strOr(jsonLd["datePublished"], values["dcterms.available"],
+		values["dcterms.created"], values["dcterms.issued"])
+	metadataDateModified := strOr(jsonLd["dateModified"], values["dcterms.modified"])
+
 	// in many sites the meta value is escaped with HTML entities,
 	// so here we need to unescape it
 	metadataTitle = shtml.UnescapeString(metadataTitle)
 	metadataByline = shtml.UnescapeString(metadataByline)
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 	metadataSiteName = shtml.UnescapeString(metadataSiteName)
+	metadataDatePublished = shtml.UnescapeString(metadataDatePublished)
+	metadataDateModified = shtml.UnescapeString(metadataDateModified)
 
 	return map[string]string{
-		"title":    metadataTitle,
-		"byline":   metadataByline,
-		"excerpt":  metadataExcerpt,
-		"siteName": metadataSiteName,
-		"image":    metadataImage,
-		"favicon":  metadataFavicon,
+		"title":         metadataTitle,
+		"byline":        metadataByline,
+		"excerpt":       metadataExcerpt,
+		"siteName":      metadataSiteName,
+		"image":         metadataImage,
+		"favicon":       metadataFavicon,
+		"datePublished": metadataDatePublished,
+		"dateModified":  metadataDateModified,
 	}
 }
 
