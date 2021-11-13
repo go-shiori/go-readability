@@ -1,4 +1,4 @@
-module github.com/ashishb/go-readability
+module github.com/go-shiori/go-readability
 
 go 1.13
 
