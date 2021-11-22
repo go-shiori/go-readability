@@ -1,9 +1,9 @@
 Go-Readability
 ===
 
-[![GoDoc](https://godoc.org/github.com/go-shiori/go-readability?status.png)](https://godoc.org/github.com/go-shiori/go-readability)
-[![Travis CI](https://travis-ci.org/go-shiori/go-readability.svg?branch=master)](https://travis-ci.org/go-shiori/go-readability)
-[![Go Report Card](https://goreportcard.com/badge/github.com/go-shiori/go-readability)](https://goreportcard.com/report/github.com/go-shiori/go-readability)
+[![GoDoc](https://godoc.org/github.com/ashishb/go-readability?status.png)](https://godoc.org/github.com/ashishb/go-readability)
+<!-- [![Travis CI](https://travis-ci.org/go-shiori/go-readability.svg?branch=master)](https://travis-ci.org/go-shiori/go-readability) -->
+[![Go Report Card](https://goreportcard.com/badge/github.com/ashishb/go-readability)](https://goreportcard.com/report/github.com/ashishb/go-readability)
 [![Donate PayPal](https://img.shields.io/static/v1?label=donate&message=PayPal&color=00457C&logo=paypal)](https://www.paypal.me/RadhiFadlillah)
 [![Donate Ko-fi](https://img.shields.io/static/v1?label=donate&message=Ko-fi&color=F16061&logo=ko-fi)](https://ko-fi.com/radhifadlillah)
 
@@ -20,7 +20,7 @@ This package is stable enough for use and up to date with Readability.js until c
 To install this package, just run `go get` :
 
 ```
-go get -u -v github.com/go-shiori/go-readability
+go get -u -v github.com/ashishb/go-readability
 ```
 
 ## Example
@@ -36,7 +36,7 @@ import (
 	"os"
 	"time"
 
-	readability "github.com/go-shiori/go-readability"
+	readability "github.com/ashishb/go-readability"
 )
 
 var (
@@ -88,7 +88,7 @@ import (
 	"log"
 	"net/http"
 
-	readability "github.com/go-shiori/go-readability"
+	readability "github.com/ashishb/go-readability"
 )
 
 var (
@@ -131,7 +131,7 @@ func main() {
 You can also use `go-readability` as command line app. To do that, first install the CLI :
 
 ```
-go get -u -v github.com/go-shiori/go-readability/cmd/...
+go get -u -v github.com/ashishb/go-readability/cmd/...
 ```
 
 Now you can use it by running `go-readability` in your terminal :

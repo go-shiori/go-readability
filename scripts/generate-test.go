@@ -10,7 +10,7 @@ import (
 	fp "path/filepath"
 	"time"
 
-	readability "github.com/go-shiori/go-readability"
+	readability "github.com/ashishb/go-readability"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )

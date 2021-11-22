@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	readability "github.com/go-shiori/go-readability"
+	readability "github.com/ashishb/go-readability"
 	"github.com/spf13/cobra"
 )
 
