@@ -1,12 +1,12 @@
 package readability
 
 import (
+	"log"
 	nurl "net/url"
 	"os"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
 
@@ -75,7 +75,7 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 func renderToFile(element *html.Node, filename string) {
 	dstFile, err := os.Create(filename)
 	if err != nil {
-		logrus.Fatalln("failed to create file:", err)
+		log.Fatalln("failed to create file:", err)
 	}
 	defer dstFile.Close()
 	html.Render(dstFile, element)

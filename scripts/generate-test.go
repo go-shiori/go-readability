@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	nurl "net/url"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	readability "github.com/go-shiori/go-readability"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
 
@@ -27,21 +27,21 @@ func main() {
 		testName = os.Args[1]
 		sourceURL = os.Args[2]
 	case 0:
-		logrus.Fatalln("need at least one argument")
+		log.Fatalln("need at least one argument")
 	default:
-		logrus.Fatalln("allowed max two arguments")
+		log.Fatalln("allowed max two arguments")
 	}
 
 	// Make sure test name is specified
 	if testName == "" {
-		logrus.Fatalln("test name must be defined")
+		log.Fatalln("test name must be defined")
 	}
 
 	// Make sure URL is valid
 	if sourceURL != "" {
 		_, err := nurl.ParseRequestURI(sourceURL)
 		if err != nil {
-			logrus.Fatalf("URL %s is not valid: %v\n", sourceURL, err)
+			log.Fatalf("URL %s is not valid: %v\n", sourceURL, err)
 		}
 	}
 
@@ -49,7 +49,7 @@ func main() {
 	if testName == "all" {
 		dirItems, err := ioutil.ReadDir("test-pages")
 		if err != nil {
-			logrus.Fatalf("failed to read test dir: %v\n", err)
+			log.Fatalf("failed to read test dir: %v\n", err)
 		}
 
 		for _, item := range dirItems {
@@ -63,7 +63,7 @@ func main() {
 
 			err = generateTestcase(item.Name(), "")
 			if err != nil {
-				logrus.Fatalf("failed to generate test for %s: %v\n", item.Name(), err)
+				log.Fatalf("failed to generate test for %s: %v\n", item.Name(), err)
 			}
 		}
 
@@ -72,12 +72,12 @@ func main() {
 
 	err := generateTestcase(testName, sourceURL)
 	if err != nil {
-		logrus.Fatalf("failed to generate test for %s: %v\n", testName, err)
+		log.Fatalf("failed to generate test for %s: %v\n", testName, err)
 	}
 }
 
 func generateTestcase(testName, sourceURL string) error {
-	logrus.Println("generating test for", testName)
+	log.Println("generating test for", testName)
 
 	// Check if source file for test exists
 	// If source file doesn't exist, download it first.
@@ -87,7 +87,7 @@ func generateTestcase(testName, sourceURL string) error {
 
 	if !fileExists(sourcePath) || sourceURL != "" {
 		// Download HTML file from URL.
-		logrus.Printf("downloading source for %s from %s\n", testName, sourceURL)
+		log.Printf("downloading source for %s from %s\n", testName, sourceURL)
 		err := downloadWebPage(sourceURL, sourcePath)
 		if err != nil {
 			return fmt.Errorf("failed to download source: %v", err)
