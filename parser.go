@@ -1469,8 +1469,13 @@ func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
 			return
 		}
 
-		tmpBody := dom.GetElementsByTagName(tmpDoc, "body")[0]
-		if !ps.isSingleImage(tmpBody) {
+		tmpBodyElems := dom.GetElementsByTagName(tmpDoc, "body")
+		if len(tmpBodyElems) == 0 {
+			return
+		}
+
+		tmpBody := tmpBodyElems[0]
+		if !ps.isSingleImage(tmpBodyElems[0]) {
 			return
 		}
 
