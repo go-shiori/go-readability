@@ -42,7 +42,7 @@ func (ps *Parser) CheckDocument(doc *html.Node) bool {
 	finder = func(node *html.Node) {
 		if node.Type == html.ElementNode {
 			tag := dom.TagName(node)
-			if tag == "p" || tag == "pre" {
+			if tag == "p" || tag == "pre" || tag == "article" {
 				if _, exist := nodeDict[node]; !exist {
 					nodeList = append(nodeList, node)
 					nodeDict[node] = struct{}{}
