@@ -2050,14 +2050,31 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 
 			linkDensity := ps.getLinkDensity(node)
 			contentLength := charCount(ps.getInnerText(node, true))
-
-			return (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+			haveToRemove := (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && li > p) ||
 				(input > math.Floor(p/3)) ||
 				(!isList && headingDensity < 0.9 && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
 				((embedCount == 1 && contentLength < 75) || embedCount > 1)
+
+			// Allow simple lists of images to remain in pages
+			if isList && haveToRemove {
+				for _, child := range dom.Children(node) {
+					// Don't filter in lists with li's that contain more than one child
+					if len(dom.Children(child)) > 1 {
+						return haveToRemove
+					}
+				}
+
+				// Only allow the list to remain if every li contains an image
+				liCount := len(dom.GetElementsByTagName(node, "li"))
+				if int(img) == liCount {
+					return false
+				}
+			}
+
+			return haveToRemove
 		}
 
 		return false
