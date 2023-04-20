@@ -1261,120 +1261,120 @@ func (ps *Parser) isValidByline(byline string) bool {
 // getJSONLD try to extract metadata from JSON-LD object.
 // For now, only Schema.org objects of type Article or its subtypes are supported.
 func (ps *Parser) getJSONLD() (map[string]string, error) {
-	// Find and extract <script> with type "application/ld+json"
-	scripts := ps.getAllNodesWithTag(ps.doc, "script")
-	jsonLdElement := ps.findNode(scripts, func(n *html.Node) bool {
-		return dom.GetAttribute(n, "type") == "application/ld+json"
+	var metadata map[string]string
+
+	scripts := dom.QuerySelectorAll(ps.doc, `script[type="application/ld+json"]`)
+	ps.forEachNode(scripts, func(jsonLdElement *html.Node, _ int) {
+		if metadata != nil {
+			return
+		}
+
+		// Strip CDATA markers if present
+		content := rxCDATA.ReplaceAllString(dom.TextContent(jsonLdElement), "")
+
+		// Decode JSON
+		var parsed map[string]interface{}
+		err := json.Unmarshal([]byte(content), &parsed)
+		if err != nil {
+			ps.log("error while decoding json: %v", err)
+			return
+		}
+
+		// Check context
+		strContext, isString := parsed["@context"].(string)
+		if !isString || !rxSchemaOrg.MatchString(strContext) {
+			return
+		}
+
+		// If parsed doesn't have any @type, find it in its graph list
+		if _, typeExist := parsed["@type"]; !typeExist {
+			graphList, isArray := parsed["@graph"].([]interface{})
+			if !isArray {
+				return
+			}
+
+			for _, graph := range graphList {
+				objGraph, isObj := graph.(map[string]interface{})
+				if !isObj {
+					continue
+				}
+
+				strType, isString := objGraph["@type"].(string)
+				if isString && rxJsonLdArticleTypes.MatchString(strType) {
+					parsed = objGraph
+					break
+				}
+			}
+		}
+
+		// Once again, make sure parsed has valid @type
+		strType, isString := parsed["@type"].(string)
+		if !isString || !rxJsonLdArticleTypes.MatchString(strType) {
+			return
+		}
+
+		// Initiate metadata
+		metadata = make(map[string]string)
+
+		// Title
+		name, nameIsString := parsed["name"].(string)
+		headline, headlineIsString := parsed["headline"].(string)
+
+		if nameIsString && headlineIsString && name != headline {
+			// We have both name and headline element in the JSON-LD. They should both be the same
+			// but some websites like aktualne.cz put their own name into "name" and the article
+			// title to "headline" which confuses Readability. So we try to check if either "name"
+			// or "headline" closely matches the html title, and if so, use that one. If not, then
+			// we use "name" by default.
+			title := ps.getArticleTitle()
+			nameMatches := ps.textSimilarity(name, title) > 0.75
+			headlineMatches := ps.textSimilarity(headline, title) > 0.75
+
+			if headlineMatches && !nameMatches {
+				metadata["title"] = headline
+			} else {
+				metadata["title"] = name
+			}
+		} else if name, isString := parsed["name"].(string); isString {
+			metadata["title"] = strings.TrimSpace(name)
+		} else if headline, isString := parsed["headline"].(string); isString {
+			metadata["title"] = strings.TrimSpace(headline)
+		}
+
+		// Author
+		switch val := parsed["author"].(type) {
+		case map[string]interface{}:
+			if name, isString := val["name"].(string); isString {
+				metadata["byline"] = strings.TrimSpace(name)
+			}
+
+		case []interface{}:
+			var authors []string
+			for _, author := range val {
+				objAuthor, isObj := author.(map[string]interface{})
+				if !isObj {
+					continue
+				}
+
+				if name, isString := objAuthor["name"].(string); isString {
+					authors = append(authors, strings.TrimSpace(name))
+				}
+			}
+			metadata["byline"] = strings.Join(authors, ", ")
+		}
+
+		// Description
+		if description, isString := parsed["description"].(string); isString {
+			metadata["excerpt"] = strings.TrimSpace(description)
+		}
+
+		// Publisher
+		if objPublisher, isObj := parsed["publisher"].(map[string]interface{}); isObj {
+			if name, isString := objPublisher["name"].(string); isString {
+				metadata["siteName"] = strings.TrimSpace(name)
+			}
+		}
 	})
-
-	if jsonLdElement == nil {
-		return nil, nil
-	}
-
-	// Strip CDATA markers if present
-	content := rxCDATA.ReplaceAllString(dom.TextContent(jsonLdElement), "")
-
-	// Decode JSON
-	var parsed map[string]interface{}
-	err := json.Unmarshal([]byte(content), &parsed)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check context
-	strContext, isString := parsed["@context"].(string)
-	if !isString || !rxSchemaOrg.MatchString(strContext) {
-		return nil, nil
-	}
-
-	// If parsed doesn't have any @type, find it in its graph list
-	if _, typeExist := parsed["@type"]; !typeExist {
-		graphList, isArray := parsed["@graph"].([]interface{})
-		if !isArray {
-			return nil, nil
-		}
-
-		for _, graph := range graphList {
-			objGraph, isObj := graph.(map[string]interface{})
-			if !isObj {
-				continue
-			}
-
-			strType, isString := objGraph["@type"].(string)
-			if isString && rxJsonLdArticleTypes.MatchString(strType) {
-				parsed = objGraph
-				break
-			}
-		}
-	}
-
-	// Once again, make sure parsed has valid @type
-	strType, isString := parsed["@type"].(string)
-	if !isString || !rxJsonLdArticleTypes.MatchString(strType) {
-		return nil, nil
-	}
-
-	// Fetch metadata
-	metadata := make(map[string]string)
-
-	// Title
-	name, nameIsString := parsed["name"].(string)
-	headline, headlineIsString := parsed["headline"].(string)
-
-	if nameIsString && headlineIsString && name != headline {
-		// We have both name and headline element in the JSON-LD. They should both be the same
-		// but some websites like aktualne.cz put their own name into "name" and the article
-		// title to "headline" which confuses Readability. So we try to check if either "name"
-		// or "headline" closely matches the html title, and if so, use that one. If not, then
-		// we use "name" by default.
-		title := ps.getArticleTitle()
-		nameMatches := ps.textSimilarity(name, title) > 0.75
-		headlineMatches := ps.textSimilarity(headline, title) > 0.75
-
-		if headlineMatches && !nameMatches {
-			metadata["title"] = headline
-		} else {
-			metadata["title"] = name
-		}
-	} else if name, isString := parsed["name"].(string); isString {
-		metadata["title"] = strings.TrimSpace(name)
-	} else if headline, isString := parsed["headline"].(string); isString {
-		metadata["title"] = strings.TrimSpace(headline)
-	}
-
-	// Author
-	switch val := parsed["author"].(type) {
-	case map[string]interface{}:
-		if name, isString := val["name"].(string); isString {
-			metadata["byline"] = strings.TrimSpace(name)
-		}
-
-	case []interface{}:
-		var authors []string
-		for _, author := range val {
-			objAuthor, isObj := author.(map[string]interface{})
-			if !isObj {
-				continue
-			}
-
-			if name, isString := objAuthor["name"].(string); isString {
-				authors = append(authors, strings.TrimSpace(name))
-			}
-		}
-		metadata["byline"] = strings.Join(authors, ", ")
-	}
-
-	// Description
-	if description, isString := parsed["description"].(string); isString {
-		metadata["excerpt"] = strings.TrimSpace(description)
-	}
-
-	// Publisher
-	if objPublisher, isObj := parsed["publisher"].(map[string]interface{}); isObj {
-		if name, isString := objPublisher["name"].(string); isString {
-			metadata["siteName"] = strings.TrimSpace(name)
-		}
-	}
 
 	return metadata, nil
 }
