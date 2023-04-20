@@ -1911,7 +1911,7 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 
 		for i := 0; i < len(elem.Attr); i++ {
 			attr := elem.Attr[i]
-			if attr.Key == "src" || attr.Key == "srcset" {
+			if attr.Key == "src" || attr.Key == "srcset" || attr.Key == "alt" {
 				continue
 			}
 
