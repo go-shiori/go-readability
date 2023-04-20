@@ -1792,7 +1792,8 @@ func (ps *Parser) getRowAndColumnCount(table *html.Node) (int, int) {
 }
 
 // markDataTables looks for 'data' (as opposed to 'layout') tables
-// and mark it.
+// and mark it, which similar as used in Firefox:
+// https://searchfox.org/mozilla-central/rev/f82d5c549f046cb64ce5602bfd894b7ae807c8f8/accessible/generic/TableAccessible.cpp#19
 func (ps *Parser) markDataTables(root *html.Node) {
 	tables := dom.GetElementsByTagName(root, "table")
 	for i := 0; i < len(tables); i++ {
