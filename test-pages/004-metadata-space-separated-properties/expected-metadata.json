@@ -1,6 +1,6 @@
 {
+    "title": "Preferred title",
     "byline": "Creator Name",
     "excerpt": "Preferred description",
-    "siteName": "",
-    "title": "Preferred title"
+    "readerable": true
 }

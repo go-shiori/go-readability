@@ -19,6 +19,15 @@ var (
 	fakeHostURL, _ = url.ParseRequestURI("http://fakehost/test/page.html")
 )
 
+type ExpectedMetadata struct {
+	Title      string `json:"title,omitempty"`
+	Byline     string `json:"byline,omitempty"`
+	Excerpt    string `json:"excerpt,omitempty"`
+	Language   string `json:"language,omitempty"`
+	SiteName   string `json:"siteName,omitempty"`
+	Readerable bool   `json:"readerable"`
+}
+
 func Test_parser(t *testing.T) {
 	testDir := "test-pages"
 	testItems, err := ioutil.ReadDir(testDir)
@@ -39,7 +48,7 @@ func Test_parser(t *testing.T) {
 			expectedMetaPath := fp.Join(testDir, itemName, "expected-metadata.json")
 
 			// Extract source file
-			article, extractedDoc, err := extractSourceFile(sourcePath)
+			article, originalDoc, extractedDoc, err := extractSourceFile(sourcePath)
 			if err != nil {
 				t1.Error(err)
 			}
@@ -63,50 +72,60 @@ func Test_parser(t *testing.T) {
 			}
 
 			// Check metadata
-			if metadata["byline"] != article.Byline {
-				t1.Errorf("byline, want %q got %q\n", metadata["byline"], article.Byline)
+			if metadata.Byline != article.Byline {
+				t1.Errorf("byline, want %q got %q\n", metadata.Byline, article.Byline)
 			}
 
-			if metadata["excerpt"] != article.Excerpt {
-				t1.Errorf("excerpt, want %q got %q\n", metadata["excerpt"], article.Excerpt)
+			if metadata.Excerpt != article.Excerpt {
+				t1.Errorf("excerpt, want %q got %q\n", metadata.Excerpt, article.Excerpt)
 			}
 
-			if metadata["siteName"] != article.SiteName {
-				t1.Errorf("sitename, want %q got %q\n", metadata["siteName"], article.SiteName)
+			if metadata.SiteName != article.SiteName {
+				t1.Errorf("sitename, want %q got %q\n", metadata.SiteName, article.SiteName)
 			}
 
-			if metadata["title"] != article.Title {
-				t1.Errorf("title, want %q got %q\n", metadata["title"], article.Title)
+			if metadata.Title != article.Title {
+				t1.Errorf("title, want %q got %q\n", metadata.Title, article.Title)
 			}
 
-			if language, exist := metadata["language"]; exist && language != article.Language {
-				t1.Errorf("language, want %q got %q\n", language, article.Language)
+			if isReaderable := CheckDocument(originalDoc); metadata.Readerable != isReaderable {
+				t1.Errorf("readerable, want %v got %v\n", metadata.Readerable, isReaderable)
+			}
+
+			if metadata.Language != article.Language {
+				t1.Errorf("language, want %q got %q\n", metadata.Language, article.Language)
 			}
 		})
 	}
 }
 
-func extractSourceFile(path string) (Article, *html.Node, error) {
+func extractSourceFile(path string) (Article, *html.Node, *html.Node, error) {
 	// Open source file
 	f, err := os.Open(path)
 	if err != nil {
-		return Article{}, nil, fmt.Errorf("failed to open source: %v", err)
+		return Article{}, nil, nil, fmt.Errorf("failed to open source: %v", err)
 	}
 	defer f.Close()
 
-	// Extract readable article
-	article, err := FromReader(f, fakeHostURL)
+	// Decode to HTML
+	originalDoc, err := dom.Parse(f)
 	if err != nil {
-		return Article{}, nil, fmt.Errorf("failed to extract source: %v", err)
+		return Article{}, nil, nil, fmt.Errorf("failed to decode source: %v", err)
+	}
+
+	// Extract readable article
+	article, err := FromDocument(originalDoc, fakeHostURL)
+	if err != nil {
+		return Article{}, nil, nil, fmt.Errorf("failed to extract source: %v", err)
 	}
 
 	// Parse article into HTML
-	doc, err := html.Parse(strings.NewReader(article.Content))
+	extractedDoc, err := dom.Parse(strings.NewReader(article.Content))
 	if err != nil {
-		return Article{}, nil, fmt.Errorf("failed to parse source to HTML: %v", err)
+		return Article{}, nil, nil, fmt.Errorf("failed to parse exytract to HTML: %v", err)
 	}
 
-	return article, doc, nil
+	return article, originalDoc, extractedDoc, nil
 }
 
 func decodeExpectedFile(path string) (*html.Node, error) {
@@ -118,7 +137,7 @@ func decodeExpectedFile(path string) (*html.Node, error) {
 	defer f.Close()
 
 	// Parse file into HTML document
-	doc, err := html.Parse(f)
+	doc, err := dom.Parse(f)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse expected to HTML: %v", err)
 	}
@@ -126,16 +145,18 @@ func decodeExpectedFile(path string) (*html.Node, error) {
 	return doc, nil
 }
 
-func decodeExpectedMetadata(path string) (map[string]string, error) {
+func decodeExpectedMetadata(path string) (ExpectedMetadata, error) {
+	var zero ExpectedMetadata
+
 	// Open expected file
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open metadata: %v", err)
+		return zero, fmt.Errorf("failed to open metadata: %v", err)
 	}
 	defer f.Close()
 
 	// Parse file into map
-	var result map[string]string
+	var result ExpectedMetadata
 	err = json.NewDecoder(f).Decode(&result)
 	return result, err
 }

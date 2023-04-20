@@ -1,6 +1,5 @@
 {
-    "byline": "",
+    "title": "Basic tag cleaning test",
     "excerpt": "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-    "siteName": "",
-    "title": "Basic tag cleaning test"
+    "readerable": true
 }

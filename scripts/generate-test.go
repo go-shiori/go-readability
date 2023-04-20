@@ -11,6 +11,7 @@ import (
 	fp "path/filepath"
 	"time"
 
+	"github.com/go-shiori/dom"
 	readability "github.com/go-shiori/go-readability"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
@@ -95,20 +96,26 @@ func generateTestcase(testName, sourceURL string) error {
 		}
 	}
 
-	// Parse source file, then generate expected result.
+	// Open and parse source file
 	srcFile, err := os.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("failed to open source: %v", err)
 	}
 	defer srcFile.Close()
 
+	doc, err := dom.Parse(srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to decode source: %v", err)
+	}
+
+	// Extract readable result.
 	parsedURL, _ := nurl.ParseRequestURI("http://fakehost/test/page.html")
-	article, err := readability.FromReader(srcFile, parsedURL)
+	article, err := readability.FromDocument(doc, parsedURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse source: %v", err)
 	}
 
-	// Render article content to file.
+	// Render extracted content to file.
 	dstPath := fp.Join(testDir, "expected.html")
 	if err = renderNodeToFile(article.Node, dstPath); err != nil {
 		return fmt.Errorf("failed to render result: %v", err)
@@ -116,7 +123,7 @@ func generateTestcase(testName, sourceURL string) error {
 
 	// Render metadata to file.
 	dstPath = fp.Join(testDir, "expected-metadata.json")
-	if err = renderMetadataToFile(article, dstPath); err != nil {
+	if err = renderMetadataToFile(doc, article, dstPath); err != nil {
 		return fmt.Errorf("failed to render metadata: %v", err)
 	}
 
@@ -167,7 +174,7 @@ func renderNodeToFile(element *html.Node, filename string) error {
 	return html.Render(dstFile, element)
 }
 
-func renderMetadataToFile(article readability.Article, filename string) error {
+func renderMetadataToFile(original *html.Node, article readability.Article, filename string) error {
 	dstFile, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create metadata file: %v", err)
@@ -175,17 +182,19 @@ func renderMetadataToFile(article readability.Article, filename string) error {
 	defer dstFile.Close()
 
 	metadata := struct {
-		Byline   string `json:"byline"`
-		Excerpt  string `json:"excerpt"`
-		Language string `json:"language,omitempty"`
-		SiteName string `json:"siteName"`
-		Title    string `json:"title"`
+		Title      string `json:"title,omitempty"`
+		Byline     string `json:"byline,omitempty"`
+		Excerpt    string `json:"excerpt,omitempty"`
+		Language   string `json:"language,omitempty"`
+		SiteName   string `json:"siteName,omitempty"`
+		Readerable bool   `json:"readerable"`
 	}{
-		Byline:   article.Byline,
-		Excerpt:  article.Excerpt,
-		Language: article.Language,
-		SiteName: article.SiteName,
-		Title:    article.Title,
+		Title:      article.Title,
+		Byline:     article.Byline,
+		Excerpt:    article.Excerpt,
+		Language:   article.Language,
+		SiteName:   article.SiteName,
+		Readerable: readability.CheckDocument(original),
 	}
 
 	bt, err := json.MarshalIndent(&metadata, "", "    ")

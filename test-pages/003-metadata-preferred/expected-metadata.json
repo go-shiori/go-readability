@@ -1,6 +1,6 @@
 {
+    "title": "Dublin Core property title",
     "byline": "Dublin Core property author",
     "excerpt": "Dublin Core property description",
-    "siteName": "",
-    "title": "Dublin Core property title"
+    "readerable": true
 }

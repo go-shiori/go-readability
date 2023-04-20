@@ -1,6 +1,5 @@
 {
-    "byline": "",
+    "title": "Remove aria-hidden elements test",
     "excerpt": "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-    "siteName": "",
-    "title": "Remove aria-hidden elements test"
+    "readerable": false
 }
