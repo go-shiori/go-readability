@@ -174,11 +174,20 @@ func renderMetadataToFile(article readability.Article, filename string) error {
 	}
 	defer dstFile.Close()
 
-	metadata := map[string]interface{}{
-		"title":    article.Title,
-		"byline":   article.Byline,
-		"excerpt":  article.Excerpt,
-		"siteName": article.SiteName}
+	metadata := struct {
+		Byline   string `json:"byline"`
+		Excerpt  string `json:"excerpt"`
+		Language string `json:"language,omitempty"`
+		SiteName string `json:"siteName"`
+		Title    string `json:"title"`
+	}{
+		Byline:   article.Byline,
+		Excerpt:  article.Excerpt,
+		Language: article.Language,
+		SiteName: article.SiteName,
+		Title:    article.Title,
+	}
+
 	bt, err := json.MarshalIndent(&metadata, "", "    ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal json: %v", err)

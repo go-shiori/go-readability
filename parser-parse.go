@@ -124,5 +124,6 @@ func (ps *Parser) ParseDocument(doc *html.Node, pageURL *nurl.URL) (Article, err
 		SiteName:    metadata["siteName"],
 		Image:       metadata["image"],
 		Favicon:     metadata["favicon"],
+		Language:    ps.articleLang,
 	}, nil
 }

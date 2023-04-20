@@ -78,6 +78,10 @@ func Test_parser(t *testing.T) {
 			if metadata["title"] != article.Title {
 				t1.Errorf("title, want %q got %q\n", metadata["title"], article.Title)
 			}
+
+			if language, exist := metadata["language"]; exist && language != article.Language {
+				t1.Errorf("language, want %q got %q\n", language, article.Language)
+			}
 		})
 	}
 }

@@ -96,6 +96,7 @@ type Article struct {
 	SiteName    string
 	Image       string
 	Favicon     string
+	Language    string
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -127,6 +128,7 @@ type Parser struct {
 	articleByline   string
 	articleDir      string
 	articleSiteName string
+	articleLang     string
 	attempts        []parseAttempt
 	flags           flags
 }
@@ -801,6 +803,10 @@ func (ps *Parser) grabArticle() *html.Node {
 		for node != nil {
 			matchString := dom.ClassName(node) + " " + dom.ID(node)
 
+			if dom.TagName(node) == "html" {
+				ps.articleLang = dom.GetAttribute(node, "lang")
+			}
+
 			if !ps.isProbablyVisible(node) {
 				ps.logf("removing hidden node: %q\n", matchString)
 				node = ps.removeAndGetNext(node)
@@ -1276,7 +1282,7 @@ func (ps *Parser) getJSONLD() (map[string]string, error) {
 		var parsed map[string]interface{}
 		err := json.Unmarshal([]byte(content), &parsed)
 		if err != nil {
-			ps.log("error while decoding json: %v", err)
+			ps.logf("error while decoding json: %v", err)
 			return
 		}
 
