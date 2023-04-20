@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	shtml "html"
+	"log"
 	"math"
 	nurl "net/url"
 	"regexp"
@@ -792,6 +793,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		// they contain no other block level elements.)
 		var elementsToScore []*html.Node
 		var node = dom.DocumentElement(doc)
+		shouldRemoveTitleHeader := true
 
 		for node != nil {
 			matchString := dom.ClassName(node) + " " + dom.ID(node)
@@ -804,6 +806,14 @@ func (ps *Parser) grabArticle() *html.Node {
 			// Check to see if this node is a byline, and remove it if
 			// it is true.
 			if ps.checkByline(node, matchString) {
+				node = ps.removeAndGetNext(node)
+				continue
+			}
+
+			if shouldRemoveTitleHeader && ps.headerDuplicatesTitle(node) {
+				ps.logf("removing header: %q duplicate of %q\n",
+					trim(dom.TextContent(node)), trim(ps.articleTitle))
+				shouldRemoveTitleHeader = false
 				node = ps.removeAndGetNext(node)
 				continue
 			}
@@ -2030,14 +2040,26 @@ func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string
 // cleanHeaders cleans out spurious headers from an Element.
 func (ps *Parser) cleanHeaders(e *html.Node) {
 	headingNodes := ps.getAllNodesWithTag(e, "h1", "h2")
-	nodeToRemove := ps.findNode(headingNodes, func(node *html.Node) bool {
-		heading := ps.getInnerText(node, false)
-		return ps.textSimilarity(ps.articleTitle, heading) > 0.75 || ps.getClassWeight(node) < 0
+	ps.removeNodes(headingNodes, func(node *html.Node) bool {
+		// Removing header with low class weight
+		if ps.getClassWeight(node) < 0 {
+			ps.logf("removing header with low class weight: %q\n", dom.OuterHTML(node))
+			return true
+		}
+		return false
 	})
+}
 
-	if nodeToRemove != nil {
-		ps.removeNodes([]*html.Node{nodeToRemove}, nil)
+// headerDuplicateTitle check if this node is an H1 or H2 element whose content
+// is mostly the same as the article title.
+func (ps *Parser) headerDuplicatesTitle(node *html.Node) bool {
+	if tag := dom.TagName(node); tag != "h1" && tag != "h2" {
+		return false
 	}
+
+	heading := ps.getInnerText(node, false)
+	ps.logf("evaluating similarity of header: %q and %q\n", heading, ps.articleTitle)
+	return ps.textSimilarity(ps.articleTitle, heading) > 0.75
 }
 
 // isProbablyVisible determines if a node is visible.
@@ -2185,5 +2207,17 @@ func (ps *Parser) clearReadabilityAttr(node *html.Node) {
 
 	for child := dom.FirstElementChild(node); child != nil; child = dom.NextElementSibling(child) {
 		ps.clearReadabilityAttr(child)
+	}
+}
+
+func (ps *Parser) log(args ...interface{}) {
+	if ps.Debug {
+		log.Println(args...)
+	}
+}
+
+func (ps *Parser) logf(format string, args ...interface{}) {
+	if ps.Debug {
+		log.Printf(format, args...)
 	}
 }

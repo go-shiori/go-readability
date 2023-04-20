@@ -108,3 +108,8 @@ func strFilter(strs []string, filter func(string) bool) []string {
 	}
 	return result
 }
+
+func trim(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.TrimSpace(s)
+}

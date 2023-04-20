@@ -2,7 +2,9 @@
                     <p>
                         Emscripten has always focused first and foremost on compiling to the Web and other JavaScript environments like Node.js. But as WebAssembly starts to be used <em>without</em> JavaScript, new use cases are appearing, and so we&#39;ve been working on support for emitting <a href="https://github.com/emscripten-core/emscripten/wiki/WebAssembly-Standalone"><strong>standalone Wasm</strong></a> files from Emscripten, that do not depend on the Emscripten JS runtime! This post explains why that&#39;s interesting.
                     </p>
-                    
+                    <h2 id="using-standalone-mode-in-emscripten">
+                        Using standalone mode in Emscripten <a href="#using-standalone-mode-in-emscripten">#</a>
+                    </h2>
                     <p>
                         First, let&#39;s see what you can do with this new feature! Similar to <a href="https://hacks.mozilla.org/2018/01/shrinking-webassembly-and-javascript-code-sizes-in-emscripten/">this post</a> let&#39;s start with a &#34;hello world&#34; type program that exports a single function that adds two numbers:
                     </p>
