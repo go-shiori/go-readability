@@ -288,8 +288,8 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 				// If the link has multiple children, they should
 				// all be preserved
 				container := dom.CreateElement("span")
-				for _, child := range linkChilds {
-					container.AppendChild(dom.Clone(child, true))
+				for link.FirstChild != nil {
+					dom.AppendChild(container, link.FirstChild)
 				}
 				dom.ReplaceChild(link.Parent, container, link)
 			}
@@ -1008,10 +1008,9 @@ func (ps *Parser) grabArticle() *html.Node {
 			neededToCreateTopCandidate = true
 			// Move everything (not just elements, also text nodes etc.)
 			// into the container so we even include text directly in the body:
-			kids := dom.ChildNodes(page)
-			for i := 0; i < len(kids); i++ {
-				ps.logf("moving child out: %q\n", dom.OuterHTML(kids[i]))
-				dom.AppendChild(topCandidate, kids[i])
+			for page.FirstChild != nil {
+				ps.logf("moving child out: %q\n", dom.OuterHTML(page.FirstChild))
+				dom.AppendChild(topCandidate, page.FirstChild)
 			}
 
 			dom.AppendChild(page, topCandidate)
@@ -1152,6 +1151,11 @@ func (ps *Parser) grabArticle() *html.Node {
 				}
 
 				dom.AppendChild(articleContent, sibling)
+
+				// TODO:
+				// this line is implemented in Readability.js, however
+				// it doesn't seem to be useful for our port.
+				// siblings = dom.Children(parentOfTopCandidate)
 			}
 		}
 
@@ -1181,9 +1185,8 @@ func (ps *Parser) grabArticle() *html.Node {
 			div := dom.CreateElement("div")
 			dom.SetAttribute(div, "id", "readability-page-1")
 			dom.SetAttribute(div, "class", "page")
-			childs := dom.ChildNodes(articleContent)
-			for i := 0; i < len(childs); i++ {
-				dom.AppendChild(div, childs[i])
+			for articleContent.FirstChild != nil {
+				dom.AppendChild(div, articleContent.FirstChild)
 			}
 			dom.AppendChild(articleContent, div)
 		}
