@@ -1583,10 +1583,7 @@ func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
 
 // removeScripts removes script tags from the document.
 func (ps *Parser) removeScripts(doc *html.Node) {
-	scripts := dom.GetElementsByTagName(doc, "script")
-	noScripts := dom.GetElementsByTagName(doc, "noscript")
-	ps.removeNodes(scripts, nil)
-	ps.removeNodes(noScripts, nil)
+	ps.removeNodes(ps.getAllNodesWithTag(doc, "script", "noscript"), nil)
 }
 
 // hasSingleTagInsideElement check if this node has only whitespace
