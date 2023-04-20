@@ -813,6 +813,14 @@ func (ps *Parser) grabArticle() *html.Node {
 				continue
 			}
 
+			// User is not able to see elements applied with both "aria-modal = true"
+			// and "role = dialog"
+			if dom.GetAttribute(node, "aria-modal") == "true" &&
+				dom.GetAttribute(node, "role") == "dialog" {
+				node = ps.removeAndGetNext(node)
+				continue
+			}
+
 			// Check to see if this node is a byline, and remove it if
 			// it is true.
 			if ps.checkByline(node, matchString) {
