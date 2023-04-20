@@ -98,3 +98,13 @@ func sliceToMap(strings ...string) map[string]struct{} {
 	}
 	return result
 }
+
+func strFilter(strs []string, filter func(string) bool) []string {
+	var result []string
+	for _, s := range strs {
+		if filter(s) {
+			result = append(result, s)
+		}
+	}
+	return result
+}

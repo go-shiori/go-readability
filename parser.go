@@ -29,6 +29,7 @@ var (
 	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxNextLink             = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
 	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
+	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
 	rxHashURL              = regexp.MustCompile(`(?i)^#.+`)
@@ -466,9 +467,12 @@ func (ps *Parser) nextNode(node *html.Node) *html.Node {
 
 // replaceBrs replaces 2 or more successive <br> with a single <p>.
 // Whitespace between <br> elements are ignored. For example:
-//   <div>foo<br>bar<br> <br><br>abc</div>
+//
+//	<div>foo<br>bar<br> <br><br>abc</div>
+//
 // will become:
-//   <div>foo<br>bar<p>abc</p></div>
+//
+//	<div>foo<br>bar<p>abc</p></div>
 func (ps *Parser) replaceBrs(elem *html.Node) {
 	ps.forEachNode(ps.getAllNodesWithTag(elem, "br"), func(br *html.Node, _ int) {
 		next := br.NextSibling
@@ -555,7 +559,6 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	ps.cleanConditionally(articleContent, "fieldset")
 	ps.clean(articleContent, "object")
 	ps.clean(articleContent, "embed")
-	ps.clean(articleContent, "h1")
 	ps.clean(articleContent, "footer")
 	ps.clean(articleContent, "link")
 	ps.clean(articleContent, "aside")
@@ -571,27 +574,6 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 		})
 	})
 
-	// If there is only one h2 and its text content substantially
-	// equals article title, they are probably using it as a header
-	// and not a subheader, so remove it since we already extract
-	// the title separately.
-	if h2s := dom.GetElementsByTagName(articleContent, "h2"); len(h2s) == 1 {
-		h2 := h2s[0]
-		h2Text := dom.TextContent(h2)
-		lengthSimilarRate := float64(charCount(h2Text)-charCount(ps.articleTitle)) / float64(charCount(ps.articleTitle))
-		if math.Abs(lengthSimilarRate) < 0.5 {
-			titlesMatch := false
-			if lengthSimilarRate > 0 {
-				titlesMatch = strings.Contains(h2Text, ps.articleTitle)
-			} else {
-				titlesMatch = strings.Contains(ps.articleTitle, h2Text)
-			}
-			if titlesMatch {
-				ps.clean(articleContent, "h2")
-			}
-		}
-	}
-
 	ps.clean(articleContent, "iframe")
 	ps.clean(articleContent, "input")
 	ps.clean(articleContent, "textarea")
@@ -604,6 +586,9 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	ps.cleanConditionally(articleContent, "table")
 	ps.cleanConditionally(articleContent, "ul")
 	ps.cleanConditionally(articleContent, "div")
+
+	// Replace H1 with H2 as H1 should be only title that is displayed separately
+	ps.replaceNodeTags(ps.getAllNodesWithTag(articleContent, "h1"), "h2")
 
 	// Remove extra paragraphs
 	ps.removeNodes(dom.GetElementsByTagName(articleContent, "p"), func(p *html.Node) bool {
@@ -710,6 +695,28 @@ func (ps *Parser) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Nod
 	return nil
 }
 
+// textSimilarity compares second text to first one. 1 = same text, 0 = completely different text.
+// The way it works: it splits both texts into words and then finds words that are unique in
+// second text the result is given by the lower length of unique parts.
+func (ps *Parser) textSimilarity(textA, textB string) float64 {
+	tokensA := rxTokenize.Split(strings.ToLower(textA), -1)
+	tokensA = strFilter(tokensA, func(s string) bool { return s != "" })
+	mapTokensA := sliceToMap(tokensA...)
+
+	tokensB := rxTokenize.Split(strings.ToLower(textB), -1)
+	tokensB = strFilter(tokensB, func(s string) bool { return s != "" })
+	uniqueTokensB := strFilter(tokensB, func(s string) bool {
+		_, existInA := mapTokensA[s]
+		return !existInA
+	})
+
+	mergedB := strings.Join(tokensB, " ")
+	mergedUniqueB := strings.Join(uniqueTokensB, " ")
+	distanceB := float64(charCount(mergedUniqueB)) / float64(charCount(mergedB))
+
+	return 1 - distanceB
+}
+
 // checkByline determines if a node is used as byline.
 func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	if ps.articleByline != "" {
@@ -728,6 +735,21 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	}
 
 	return false
+}
+
+func (ps *Parser) getTextDensity(node *html.Node, tags ...string) float64 {
+	textLength := charCount(ps.getInnerText(node, true))
+	if textLength == 0 {
+		return 0
+	}
+
+	var childrenLength int
+	children := ps.getAllNodesWithTag(node, tags...)
+	ps.forEachNode(children, func(child *html.Node, _ int) {
+		childrenLength += charCount(ps.getInnerText(child, true))
+	})
+
+	return float64(childrenLength) / float64(textLength)
 }
 
 // getNodeAncestors gets the node's direct parent and grandparents.
@@ -1953,6 +1975,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			img := float64(len(dom.GetElementsByTagName(node, "img")))
 			li := float64(len(dom.GetElementsByTagName(node, "li")) - 100)
 			input := float64(len(dom.GetElementsByTagName(node, "input")))
+			headingDensity := ps.getTextDensity(node, "h1", "h2", "h3", "h4", "h5", "h6")
 
 			embedCount := 0
 			embeds := ps.getAllNodesWithTag(node, "object", "embed", "iframe")
@@ -1980,7 +2003,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			return (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && li > p) ||
 				(input > math.Floor(p/3)) ||
-				(!isList && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+				(!isList && headingDensity < 0.9 && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
 				((embedCount == 1 && contentLength < 75) || embedCount > 1)
@@ -2005,13 +2028,15 @@ func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string
 }
 
 // cleanHeaders cleans out spurious headers from an Element.
-// Checks things like classnames and link density.
 func (ps *Parser) cleanHeaders(e *html.Node) {
-	for headerIndex := 1; headerIndex < 3; headerIndex++ {
-		headerTag := fmt.Sprintf("h%d", headerIndex)
-		ps.removeNodes(dom.GetElementsByTagName(e, headerTag), func(header *html.Node) bool {
-			return ps.getClassWeight(header) < 0
-		})
+	headingNodes := ps.getAllNodesWithTag(e, "h1", "h2")
+	nodeToRemove := ps.findNode(headingNodes, func(node *html.Node) bool {
+		heading := ps.getInnerText(node, false)
+		return ps.textSimilarity(ps.articleTitle, heading) > 0.75 || ps.getClassWeight(node) < 0
+	})
+
+	if nodeToRemove != nil {
+		ps.removeNodes([]*html.Node{nodeToRemove}, nil)
 	}
 }
 
