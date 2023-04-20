@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -109,9 +110,14 @@ func generateTestcase(testName, sourceURL string) error {
 
 	// Render article content to file.
 	dstPath := fp.Join(testDir, "expected.html")
-	err = renderNodeToFile(article.Node, dstPath)
-	if err != nil {
+	if err = renderNodeToFile(article.Node, dstPath); err != nil {
 		return fmt.Errorf("failed to render result: %v", err)
+	}
+
+	// Render metadata to file.
+	dstPath = fp.Join(testDir, "expected-metadata.json")
+	if err = renderMetadataToFile(article, dstPath); err != nil {
+		return fmt.Errorf("failed to render metadata: %v", err)
 	}
 
 	return nil
@@ -154,9 +160,34 @@ func downloadWebPage(srcURL string, dstPath string) error {
 func renderNodeToFile(element *html.Node, filename string) error {
 	dstFile, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
+		return fmt.Errorf("failed to create html file: %v", err)
 	}
 	defer dstFile.Close()
 
 	return html.Render(dstFile, element)
+}
+
+func renderMetadataToFile(article readability.Article, filename string) error {
+	dstFile, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create metadata file: %v", err)
+	}
+	defer dstFile.Close()
+
+	metadata := map[string]interface{}{
+		"title":    article.Title,
+		"byline":   article.Byline,
+		"excerpt":  article.Excerpt,
+		"siteName": article.SiteName}
+	bt, err := json.MarshalIndent(&metadata, "", "    ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %v", err)
+	}
+
+	_, err = dstFile.Write(bt)
+	if err != nil {
+		return fmt.Errorf("failed to write metadata file: %v", err)
+	}
+
+	return dstFile.Sync()
 }

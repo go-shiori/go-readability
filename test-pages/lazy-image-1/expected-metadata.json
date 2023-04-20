@@ -1,0 +1,6 @@
+{
+    "byline": "Vincent Vallet",
+    "excerpt": "How to run a CPU profiling with Node.js on your production in real-time and without interruption of service.",
+    "siteName": "Voodoo Engineering",
+    "title": "Node.js and CPU profiling on production (in real-time without downtime)"
+}
