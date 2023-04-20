@@ -774,6 +774,8 @@ func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // element types), find the content that is most likely to be the
 // stuff a user wants to read. Then return it wrapped up in a div.
 func (ps *Parser) grabArticle() *html.Node {
+	ps.log("**** GRAB ARTICLE ****")
+
 	for {
 		doc := dom.Clone(ps.doc, true)
 
@@ -784,6 +786,7 @@ func (ps *Parser) grabArticle() *html.Node {
 
 		// We can't grab an article if we don't have a page!
 		if page == nil {
+			ps.log("no body found in document, abort")
 			return nil
 		}
 
@@ -799,6 +802,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			matchString := dom.ClassName(node) + " " + dom.ID(node)
 
 			if !ps.isProbablyVisible(node) {
+				ps.logf("removing hidden node: %q\n", matchString)
 				node = ps.removeAndGetNext(node)
 				continue
 			}
@@ -826,12 +830,14 @@ func (ps *Parser) grabArticle() *html.Node {
 					!ps.hasAncestorTag(node, "table", 3, nil) &&
 					!ps.hasAncestorTag(node, "code", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
+					ps.logf("removing unlikely candidate: %q\n", matchString)
 					node = ps.removeAndGetNext(node)
 					continue
 				}
 
 				role := dom.GetAttribute(node, "role")
 				if _, include := unlikelyRoles[role]; include {
+					ps.logf("removing content with role %q: %q\n", role, matchString)
 					node = ps.removeAndGetNext(node)
 					continue
 				}
@@ -970,6 +976,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		for i := 0; i < len(candidates); i++ {
 			candidate := candidates[i]
 			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
+			ps.logf("candidate %q with score: %f\n", dom.OuterHTML(candidate), candidateScore)
 			ps.setContentScore(candidate, candidateScore)
 		}
 
@@ -1003,6 +1010,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			// into the container so we even include text directly in the body:
 			kids := dom.ChildNodes(page)
 			for i := 0; i < len(kids); i++ {
+				ps.logf("moving child out: %q\n", dom.OuterHTML(kids[i]))
 				dom.AppendChild(topCandidate, kids[i])
 			}
 
