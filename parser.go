@@ -27,7 +27,7 @@ var (
 	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
 	rxReplaceFonts         = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
 	rxNormalize            = regexp.MustCompile(`(?i)\s{2,}`)
-	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
+	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxNextLink             = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
 	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
@@ -121,6 +121,9 @@ type Parser struct {
 	// DisableJSONLD determines if metadata in JSON+LD will be extracted
 	// or not. Default: false.
 	DisableJSONLD bool
+	// AllowedVideoRegex is a regular expression that matches video URLs that should be
+	// allowed to be included in the article content. If undefined, it will use default filter.
+	AllowedVideoRegex *regexp.Regexp
 
 	doc             *html.Node
 	documentURI     *nurl.URL
@@ -1749,6 +1752,10 @@ func (ps *Parser) getClassWeight(node *html.Node) int {
 // (Unless it's a youtube/vimeo video. People love movies.)
 func (ps *Parser) clean(node *html.Node, tag string) {
 	isEmbed := indexOf([]string{"object", "embed", "iframe"}, tag) != -1
+	rxVideoVilter := ps.AllowedVideoRegex
+	if rxVideoVilter == nil {
+		rxVideoVilter = rxVideosx
+	}
 
 	ps.removeNodes(dom.GetElementsByTagName(node, tag), func(element *html.Node) bool {
 		// Allow youtube and vimeo videos through as people usually want to see those.
@@ -1756,13 +1763,13 @@ func (ps *Parser) clean(node *html.Node, tag string) {
 			// First, check the elements attributes to see if any of them contain
 			// youtube or vimeo
 			for _, attr := range element.Attr {
-				if rxVideos.MatchString(attr.Val) {
+				if rxVideoVilter.MatchString(attr.Val) {
 					return false
 				}
 			}
 
 			// For embed with <object> tag, check inner HTML as well.
-			if dom.TagName(element) == "object" && rxVideos.MatchString(dom.InnerHTML(element)) {
+			if dom.TagName(element) == "object" && rxVideoVilter.MatchString(dom.InnerHTML(element)) {
 				return false
 			}
 		}
@@ -1981,6 +1988,12 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 		return
 	}
 
+	// Prepare regex video filter
+	rxVideoVilter := ps.AllowedVideoRegex
+	if rxVideoVilter == nil {
+		rxVideoVilter = rxVideosx
+	}
+
 	// Gather counts for other typical elements embedded within.
 	// Traverse backwards so we can remove nodes at the same time
 	// without effecting the traversal.
@@ -2035,13 +2048,13 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 				// If this embed has attribute that matches video regex,
 				// don't delete it.
 				for _, attr := range embed.Attr {
-					if rxVideos.MatchString(attr.Val) {
+					if rxVideoVilter.MatchString(attr.Val) {
 						return false
 					}
 				}
 
 				// For embed with <object> tag, check inner HTML as well.
-				if dom.TagName(embed) == "object" && rxVideos.MatchString(dom.InnerHTML(embed)) {
+				if dom.TagName(embed) == "object" && rxVideoVilter.MatchString(dom.InnerHTML(embed)) {
 					return false
 				}
 
