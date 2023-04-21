@@ -23,13 +23,9 @@ var (
 	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|content|main|shadow`)
 	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
 	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
-	rxExtraneous           = regexp.MustCompile(`(?i)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
 	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
-	rxReplaceFonts         = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
 	rxNormalize            = regexp.MustCompile(`(?i)\s{2,}`)
 	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
-	rxNextLink             = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
-	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
@@ -53,7 +49,6 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org$`)
-	rxCharset              = regexp.MustCompile(`(?i)charset\s*=\s*([^;\s"]+)`)
 )
 
 // Constants that used by readability.
@@ -193,17 +188,6 @@ func (ps *Parser) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 	for i := 0; i < len(nodeList); i++ {
 		fn(nodeList[i], i)
 	}
-}
-
-// findNode iterates over a NodeList and return the first node that passes
-// the supplied test function.
-func (ps *Parser) findNode(nodeList []*html.Node, fn func(*html.Node) bool) *html.Node {
-	for i := 0; i < len(nodeList); i++ {
-		if fn(nodeList[i]) {
-			return nodeList[i]
-		}
-	}
-	return nil
 }
 
 // someNode iterates over a NodeList, return true if any of the
@@ -388,7 +372,7 @@ func (ps *Parser) getArticleTitle() string {
 		if wordCount(curTitle) < 3 {
 			curTitle = rxTitleRemove1stPart.ReplaceAllString(origTitle, "$1")
 		}
-	} else if strings.Index(curTitle, ": ") != -1 {
+	} else if strings.Contains(curTitle, ": ") {
 		// Check if we have an heading containing this exact string, so
 		// we could assume it's the full title.
 		headings := ps.concatNodeLists(
@@ -2292,3 +2276,25 @@ func (ps *Parser) logf(format string, args ...interface{}) {
 		log.Printf(format, args...)
 	}
 }
+
+// UNUSED CODES
+// Codes below these points are defined in original Readability.js but not used,
+// so here we commented it out so it can be used later if necessary.
+
+// var (
+// 	rxExtraneous   = regexp.MustCompile(`(?i)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
+// 	rxReplaceFonts = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
+// 	rxNextLink     = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
+// 	rxPrevLink     = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
+// )
+
+// // findNode iterates over a NodeList and return the first node that passes
+// // the supplied test function.
+// func (ps *Parser) findNode(nodeList []*html.Node, fn func(*html.Node) bool) *html.Node {
+// 	for i := 0; i < len(nodeList); i++ {
+// 		if fn(nodeList[i]) {
+// 			return nodeList[i]
+// 		}
+// 	}
+// 	return nil
+// }
