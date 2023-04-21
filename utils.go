@@ -2,12 +2,8 @@ package readability
 
 import (
 	nurl "net/url"
-	"os"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/sirupsen/logrus"
-	"golang.org/x/net/html"
 )
 
 // indexOf returns the position of the first occurrence of a
@@ -70,17 +66,6 @@ func toAbsoluteURI(uri string, base *nurl.URL) string {
 	return base.ResolveReference(tmp).String()
 }
 
-// renderToFile ender an element and save it to file.
-// It will panic if it fails to create destination file.
-func renderToFile(element *html.Node, filename string) {
-	dstFile, err := os.Create(filename)
-	if err != nil {
-		logrus.Fatalln("failed to create file:", err)
-	}
-	defer dstFile.Close()
-	html.Render(dstFile, element)
-}
-
 // strOr returns the first not empty string in args.
 func strOr(args ...string) string {
 	for i := 0; i < len(args); i++ {
@@ -97,4 +82,19 @@ func sliceToMap(strings ...string) map[string]struct{} {
 		result[s] = struct{}{}
 	}
 	return result
+}
+
+func strFilter(strs []string, filter func(string) bool) []string {
+	var result []string
+	for _, s := range strs {
+		if filter(s) {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+func trim(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.TrimSpace(s)
 }

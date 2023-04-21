@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	shtml "html"
+	"log"
 	"math"
 	nurl "net/url"
 	"regexp"
@@ -22,13 +23,10 @@ var (
 	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|content|main|shadow`)
 	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
 	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
-	rxExtraneous           = regexp.MustCompile(`(?i)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
 	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
-	rxReplaceFonts         = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
 	rxNormalize            = regexp.MustCompile(`(?i)\s{2,}`)
-	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
-	rxNextLink             = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
-	rxPrevLink             = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
+	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
+	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
 	rxHashURL              = regexp.MustCompile(`(?i)^#.+`)
@@ -51,7 +49,6 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org$`)
-	rxCharset              = regexp.MustCompile(`(?i)charset\s*=\s*([^;\s"]+)`)
 )
 
 // Constants that used by readability.
@@ -94,6 +91,7 @@ type Article struct {
 	SiteName    string
 	Image       string
 	Favicon     string
+	Language    string
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -118,6 +116,9 @@ type Parser struct {
 	// DisableJSONLD determines if metadata in JSON+LD will be extracted
 	// or not. Default: false.
 	DisableJSONLD bool
+	// AllowedVideoRegex is a regular expression that matches video URLs that should be
+	// allowed to be included in the article content. If undefined, it will use default filter.
+	AllowedVideoRegex *regexp.Regexp
 
 	doc             *html.Node
 	documentURI     *nurl.URL
@@ -125,6 +126,7 @@ type Parser struct {
 	articleByline   string
 	articleDir      string
 	articleSiteName string
+	articleLang     string
 	attempts        []parseAttempt
 	flags           flags
 }
@@ -186,17 +188,6 @@ func (ps *Parser) forEachNode(nodeList []*html.Node, fn func(*html.Node, int)) {
 	for i := 0; i < len(nodeList); i++ {
 		fn(nodeList[i], i)
 	}
-}
-
-// findNode iterates over a NodeList and return the first node that passes
-// the supplied test function.
-func (ps *Parser) findNode(nodeList []*html.Node, fn func(*html.Node) bool) *html.Node {
-	for i := 0; i < len(nodeList); i++ {
-		if fn(nodeList[i]) {
-			return nodeList[i]
-		}
-	}
-	return nil
 }
 
 // someNode iterates over a NodeList, return true if any of the
@@ -286,8 +277,8 @@ func (ps *Parser) fixRelativeURIs(articleContent *html.Node) {
 				// If the link has multiple children, they should
 				// all be preserved
 				container := dom.CreateElement("span")
-				for _, child := range linkChilds {
-					container.AppendChild(dom.Clone(child, true))
+				for link.FirstChild != nil {
+					dom.AppendChild(container, link.FirstChild)
 				}
 				dom.ReplaceChild(link.Parent, container, link)
 			}
@@ -381,7 +372,7 @@ func (ps *Parser) getArticleTitle() string {
 		if wordCount(curTitle) < 3 {
 			curTitle = rxTitleRemove1stPart.ReplaceAllString(origTitle, "$1")
 		}
-	} else if strings.Index(curTitle, ": ") != -1 {
+	} else if strings.Contains(curTitle, ": ") {
 		// Check if we have an heading containing this exact string, so
 		// we could assume it's the full title.
 		headings := ps.concatNodeLists(
@@ -466,9 +457,12 @@ func (ps *Parser) nextNode(node *html.Node) *html.Node {
 
 // replaceBrs replaces 2 or more successive <br> with a single <p>.
 // Whitespace between <br> elements are ignored. For example:
-//   <div>foo<br>bar<br> <br><br>abc</div>
+//
+//	<div>foo<br>bar<br> <br><br>abc</div>
+//
 // will become:
-//   <div>foo<br>bar<p>abc</p></div>
+//
+//	<div>foo<br>bar<p>abc</p></div>
 func (ps *Parser) replaceBrs(elem *html.Node) {
 	ps.forEachNode(ps.getAllNodesWithTag(elem, "br"), func(br *html.Node, _ int) {
 		next := br.NextSibling
@@ -555,7 +549,6 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	ps.cleanConditionally(articleContent, "fieldset")
 	ps.clean(articleContent, "object")
 	ps.clean(articleContent, "embed")
-	ps.clean(articleContent, "h1")
 	ps.clean(articleContent, "footer")
 	ps.clean(articleContent, "link")
 	ps.clean(articleContent, "aside")
@@ -571,27 +564,6 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 		})
 	})
 
-	// If there is only one h2 and its text content substantially
-	// equals article title, they are probably using it as a header
-	// and not a subheader, so remove it since we already extract
-	// the title separately.
-	if h2s := dom.GetElementsByTagName(articleContent, "h2"); len(h2s) == 1 {
-		h2 := h2s[0]
-		h2Text := dom.TextContent(h2)
-		lengthSimilarRate := float64(charCount(h2Text)-charCount(ps.articleTitle)) / float64(charCount(ps.articleTitle))
-		if math.Abs(lengthSimilarRate) < 0.5 {
-			titlesMatch := false
-			if lengthSimilarRate > 0 {
-				titlesMatch = strings.Contains(h2Text, ps.articleTitle)
-			} else {
-				titlesMatch = strings.Contains(ps.articleTitle, h2Text)
-			}
-			if titlesMatch {
-				ps.clean(articleContent, "h2")
-			}
-		}
-	}
-
 	ps.clean(articleContent, "iframe")
 	ps.clean(articleContent, "input")
 	ps.clean(articleContent, "textarea")
@@ -604,6 +576,9 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 	ps.cleanConditionally(articleContent, "table")
 	ps.cleanConditionally(articleContent, "ul")
 	ps.cleanConditionally(articleContent, "div")
+
+	// Replace H1 with H2 as H1 should be only title that is displayed separately
+	ps.replaceNodeTags(ps.getAllNodesWithTag(articleContent, "h1"), "h2")
 
 	// Remove extra paragraphs
 	ps.removeNodes(dom.GetElementsByTagName(articleContent, "p"), func(p *html.Node) bool {
@@ -710,6 +685,28 @@ func (ps *Parser) getNextNode(node *html.Node, ignoreSelfAndKids bool) *html.Nod
 	return nil
 }
 
+// textSimilarity compares second text to first one. 1 = same text, 0 = completely different text.
+// The way it works: it splits both texts into words and then finds words that are unique in
+// second text the result is given by the lower length of unique parts.
+func (ps *Parser) textSimilarity(textA, textB string) float64 {
+	tokensA := rxTokenize.Split(strings.ToLower(textA), -1)
+	tokensA = strFilter(tokensA, func(s string) bool { return s != "" })
+	mapTokensA := sliceToMap(tokensA...)
+
+	tokensB := rxTokenize.Split(strings.ToLower(textB), -1)
+	tokensB = strFilter(tokensB, func(s string) bool { return s != "" })
+	uniqueTokensB := strFilter(tokensB, func(s string) bool {
+		_, existInA := mapTokensA[s]
+		return !existInA
+	})
+
+	mergedB := strings.Join(tokensB, " ")
+	mergedUniqueB := strings.Join(uniqueTokensB, " ")
+	distanceB := float64(charCount(mergedUniqueB)) / float64(charCount(mergedB))
+
+	return 1 - distanceB
+}
+
 // checkByline determines if a node is used as byline.
 func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	if ps.articleByline != "" {
@@ -728,6 +725,21 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	}
 
 	return false
+}
+
+func (ps *Parser) getTextDensity(node *html.Node, tags ...string) float64 {
+	textLength := charCount(ps.getInnerText(node, true))
+	if textLength == 0 {
+		return 0
+	}
+
+	var childrenLength int
+	children := ps.getAllNodesWithTag(node, tags...)
+	ps.forEachNode(children, func(child *html.Node, _ int) {
+		childrenLength += charCount(ps.getInnerText(child, true))
+	})
+
+	return float64(childrenLength) / float64(textLength)
 }
 
 // getNodeAncestors gets the node's direct parent and grandparents.
@@ -751,6 +763,8 @@ func (ps *Parser) getNodeAncestors(node *html.Node, maxDepth int) []*html.Node {
 // element types), find the content that is most likely to be the
 // stuff a user wants to read. Then return it wrapped up in a div.
 func (ps *Parser) grabArticle() *html.Node {
+	ps.log("**** GRAB ARTICLE ****")
+
 	for {
 		doc := dom.Clone(ps.doc, true)
 
@@ -761,6 +775,7 @@ func (ps *Parser) grabArticle() *html.Node {
 
 		// We can't grab an article if we don't have a page!
 		if page == nil {
+			ps.log("no body found in document, abort")
 			return nil
 		}
 
@@ -770,11 +785,25 @@ func (ps *Parser) grabArticle() *html.Node {
 		// they contain no other block level elements.)
 		var elementsToScore []*html.Node
 		var node = dom.DocumentElement(doc)
+		shouldRemoveTitleHeader := true
 
 		for node != nil {
 			matchString := dom.ClassName(node) + " " + dom.ID(node)
 
+			if dom.TagName(node) == "html" {
+				ps.articleLang = dom.GetAttribute(node, "lang")
+			}
+
 			if !ps.isProbablyVisible(node) {
+				ps.logf("removing hidden node: %q\n", matchString)
+				node = ps.removeAndGetNext(node)
+				continue
+			}
+
+			// User is not able to see elements applied with both "aria-modal = true"
+			// and "role = dialog"
+			if dom.GetAttribute(node, "aria-modal") == "true" &&
+				dom.GetAttribute(node, "role") == "dialog" {
 				node = ps.removeAndGetNext(node)
 				continue
 			}
@@ -782,6 +811,14 @@ func (ps *Parser) grabArticle() *html.Node {
 			// Check to see if this node is a byline, and remove it if
 			// it is true.
 			if ps.checkByline(node, matchString) {
+				node = ps.removeAndGetNext(node)
+				continue
+			}
+
+			if shouldRemoveTitleHeader && ps.headerDuplicatesTitle(node) {
+				ps.logf("removing header: %q duplicate of %q\n",
+					trim(dom.TextContent(node)), trim(ps.articleTitle))
+				shouldRemoveTitleHeader = false
 				node = ps.removeAndGetNext(node)
 				continue
 			}
@@ -794,12 +831,14 @@ func (ps *Parser) grabArticle() *html.Node {
 					!ps.hasAncestorTag(node, "table", 3, nil) &&
 					!ps.hasAncestorTag(node, "code", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
+					ps.logf("removing unlikely candidate: %q\n", matchString)
 					node = ps.removeAndGetNext(node)
 					continue
 				}
 
 				role := dom.GetAttribute(node, "role")
 				if _, include := unlikelyRoles[role]; include {
+					ps.logf("removing content with role %q: %q\n", role, matchString)
 					node = ps.removeAndGetNext(node)
 					continue
 				}
@@ -938,6 +977,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		for i := 0; i < len(candidates); i++ {
 			candidate := candidates[i]
 			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
+			ps.logf("candidate %q with score: %f\n", dom.OuterHTML(candidate), candidateScore)
 			ps.setContentScore(candidate, candidateScore)
 		}
 
@@ -969,9 +1009,9 @@ func (ps *Parser) grabArticle() *html.Node {
 			neededToCreateTopCandidate = true
 			// Move everything (not just elements, also text nodes etc.)
 			// into the container so we even include text directly in the body:
-			kids := dom.ChildNodes(page)
-			for i := 0; i < len(kids); i++ {
-				dom.AppendChild(topCandidate, kids[i])
+			for page.FirstChild != nil {
+				ps.logf("moving child out: %q\n", dom.OuterHTML(page.FirstChild))
+				dom.AppendChild(topCandidate, page.FirstChild)
 			}
 
 			dom.AppendChild(page, topCandidate)
@@ -1112,6 +1152,11 @@ func (ps *Parser) grabArticle() *html.Node {
 				}
 
 				dom.AppendChild(articleContent, sibling)
+
+				// TODO:
+				// this line is implemented in Readability.js, however
+				// it doesn't seem to be useful for our port.
+				// siblings = dom.Children(parentOfTopCandidate)
 			}
 		}
 
@@ -1141,9 +1186,8 @@ func (ps *Parser) grabArticle() *html.Node {
 			div := dom.CreateElement("div")
 			dom.SetAttribute(div, "id", "readability-page-1")
 			dom.SetAttribute(div, "class", "page")
-			childs := dom.ChildNodes(articleContent)
-			for i := 0; i < len(childs); i++ {
-				dom.AppendChild(div, childs[i])
+			for articleContent.FirstChild != nil {
+				dom.AppendChild(div, articleContent.FirstChild)
 			}
 			dom.AppendChild(articleContent, div)
 		}
@@ -1218,102 +1262,120 @@ func (ps *Parser) isValidByline(byline string) bool {
 // getJSONLD try to extract metadata from JSON-LD object.
 // For now, only Schema.org objects of type Article or its subtypes are supported.
 func (ps *Parser) getJSONLD() (map[string]string, error) {
-	// Find and extract <script> with type "application/ld+json"
-	scripts := ps.getAllNodesWithTag(ps.doc, "script")
-	jsonLdElement := ps.findNode(scripts, func(n *html.Node) bool {
-		return dom.GetAttribute(n, "type") == "application/ld+json"
+	var metadata map[string]string
+
+	scripts := dom.QuerySelectorAll(ps.doc, `script[type="application/ld+json"]`)
+	ps.forEachNode(scripts, func(jsonLdElement *html.Node, _ int) {
+		if metadata != nil {
+			return
+		}
+
+		// Strip CDATA markers if present
+		content := rxCDATA.ReplaceAllString(dom.TextContent(jsonLdElement), "")
+
+		// Decode JSON
+		var parsed map[string]interface{}
+		err := json.Unmarshal([]byte(content), &parsed)
+		if err != nil {
+			ps.logf("error while decoding json: %v", err)
+			return
+		}
+
+		// Check context
+		strContext, isString := parsed["@context"].(string)
+		if !isString || !rxSchemaOrg.MatchString(strContext) {
+			return
+		}
+
+		// If parsed doesn't have any @type, find it in its graph list
+		if _, typeExist := parsed["@type"]; !typeExist {
+			graphList, isArray := parsed["@graph"].([]interface{})
+			if !isArray {
+				return
+			}
+
+			for _, graph := range graphList {
+				objGraph, isObj := graph.(map[string]interface{})
+				if !isObj {
+					continue
+				}
+
+				strType, isString := objGraph["@type"].(string)
+				if isString && rxJsonLdArticleTypes.MatchString(strType) {
+					parsed = objGraph
+					break
+				}
+			}
+		}
+
+		// Once again, make sure parsed has valid @type
+		strType, isString := parsed["@type"].(string)
+		if !isString || !rxJsonLdArticleTypes.MatchString(strType) {
+			return
+		}
+
+		// Initiate metadata
+		metadata = make(map[string]string)
+
+		// Title
+		name, nameIsString := parsed["name"].(string)
+		headline, headlineIsString := parsed["headline"].(string)
+
+		if nameIsString && headlineIsString && name != headline {
+			// We have both name and headline element in the JSON-LD. They should both be the same
+			// but some websites like aktualne.cz put their own name into "name" and the article
+			// title to "headline" which confuses Readability. So we try to check if either "name"
+			// or "headline" closely matches the html title, and if so, use that one. If not, then
+			// we use "name" by default.
+			title := ps.getArticleTitle()
+			nameMatches := ps.textSimilarity(name, title) > 0.75
+			headlineMatches := ps.textSimilarity(headline, title) > 0.75
+
+			if headlineMatches && !nameMatches {
+				metadata["title"] = headline
+			} else {
+				metadata["title"] = name
+			}
+		} else if name, isString := parsed["name"].(string); isString {
+			metadata["title"] = strings.TrimSpace(name)
+		} else if headline, isString := parsed["headline"].(string); isString {
+			metadata["title"] = strings.TrimSpace(headline)
+		}
+
+		// Author
+		switch val := parsed["author"].(type) {
+		case map[string]interface{}:
+			if name, isString := val["name"].(string); isString {
+				metadata["byline"] = strings.TrimSpace(name)
+			}
+
+		case []interface{}:
+			var authors []string
+			for _, author := range val {
+				objAuthor, isObj := author.(map[string]interface{})
+				if !isObj {
+					continue
+				}
+
+				if name, isString := objAuthor["name"].(string); isString {
+					authors = append(authors, strings.TrimSpace(name))
+				}
+			}
+			metadata["byline"] = strings.Join(authors, ", ")
+		}
+
+		// Description
+		if description, isString := parsed["description"].(string); isString {
+			metadata["excerpt"] = strings.TrimSpace(description)
+		}
+
+		// Publisher
+		if objPublisher, isObj := parsed["publisher"].(map[string]interface{}); isObj {
+			if name, isString := objPublisher["name"].(string); isString {
+				metadata["siteName"] = strings.TrimSpace(name)
+			}
+		}
 	})
-
-	if jsonLdElement == nil {
-		return nil, nil
-	}
-
-	// Strip CDATA markers if present
-	content := rxCDATA.ReplaceAllString(dom.TextContent(jsonLdElement), "")
-
-	// Decode JSON
-	var parsed map[string]interface{}
-	err := json.Unmarshal([]byte(content), &parsed)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check context
-	strContext, isString := parsed["@context"].(string)
-	if !isString || !rxSchemaOrg.MatchString(strContext) {
-		return nil, nil
-	}
-
-	// If parsed doesn't have any @type, find it in its graph list
-	if _, typeExist := parsed["@type"]; !typeExist {
-		graphList, isArray := parsed["@graph"].([]interface{})
-		if !isArray {
-			return nil, nil
-		}
-
-		for _, graph := range graphList {
-			objGraph, isObj := graph.(map[string]interface{})
-			if !isObj {
-				continue
-			}
-
-			strType, isString := objGraph["@type"].(string)
-			if isString && rxJsonLdArticleTypes.MatchString(strType) {
-				parsed = objGraph
-				break
-			}
-		}
-	}
-
-	// Once again, make sure parsed has valid @type
-	strType, isString := parsed["@type"].(string)
-	if !isString || !rxJsonLdArticleTypes.MatchString(strType) {
-		return nil, nil
-	}
-
-	// Fetch metadata
-	metadata := make(map[string]string)
-
-	// Title
-	if name, isString := parsed["name"].(string); isString {
-		metadata["title"] = strings.TrimSpace(name)
-	} else if headline, isString := parsed["headline"].(string); isString {
-		metadata["title"] = strings.TrimSpace(headline)
-	}
-
-	// Author
-	switch val := parsed["author"].(type) {
-	case map[string]interface{}:
-		if name, isString := val["name"].(string); isString {
-			metadata["byline"] = strings.TrimSpace(name)
-		}
-
-	case []interface{}:
-		var authors []string
-		for _, author := range val {
-			objAuthor, isObj := author.(map[string]interface{})
-			if !isObj {
-				continue
-			}
-
-			if name, isString := objAuthor["name"].(string); isString {
-				authors = append(authors, strings.TrimSpace(name))
-			}
-		}
-		metadata["byline"] = strings.Join(authors, ", ")
-	}
-
-	// Description
-	if description, isString := parsed["description"].(string); isString {
-		metadata["excerpt"] = strings.TrimSpace(description)
-	}
-
-	// Publisher
-	if objPublisher, isObj := parsed["publisher"].(map[string]interface{}); isObj {
-		if name, isString := objPublisher["name"].(string); isString {
-			metadata["siteName"] = strings.TrimSpace(name)
-		}
-	}
 
 	return metadata, nil
 }
@@ -1516,10 +1578,7 @@ func (ps *Parser) unwrapNoscriptImages(doc *html.Node) {
 
 // removeScripts removes script tags from the document.
 func (ps *Parser) removeScripts(doc *html.Node) {
-	scripts := dom.GetElementsByTagName(doc, "script")
-	noScripts := dom.GetElementsByTagName(doc, "noscript")
-	ps.removeNodes(scripts, nil)
-	ps.removeNodes(noScripts, nil)
+	ps.removeNodes(ps.getAllNodesWithTag(doc, "script", "noscript"), nil)
 }
 
 // hasSingleTagInsideElement check if this node has only whitespace
@@ -1677,6 +1736,10 @@ func (ps *Parser) getClassWeight(node *html.Node) int {
 // (Unless it's a youtube/vimeo video. People love movies.)
 func (ps *Parser) clean(node *html.Node, tag string) {
 	isEmbed := indexOf([]string{"object", "embed", "iframe"}, tag) != -1
+	rxVideoVilter := ps.AllowedVideoRegex
+	if rxVideoVilter == nil {
+		rxVideoVilter = rxVideosx
+	}
 
 	ps.removeNodes(dom.GetElementsByTagName(node, tag), func(element *html.Node) bool {
 		// Allow youtube and vimeo videos through as people usually want to see those.
@@ -1684,13 +1747,13 @@ func (ps *Parser) clean(node *html.Node, tag string) {
 			// First, check the elements attributes to see if any of them contain
 			// youtube or vimeo
 			for _, attr := range element.Attr {
-				if rxVideos.MatchString(attr.Val) {
+				if rxVideoVilter.MatchString(attr.Val) {
 					return false
 				}
 			}
 
 			// For embed with <object> tag, check inner HTML as well.
-			if dom.TagName(element) == "object" && rxVideos.MatchString(dom.InnerHTML(element)) {
+			if dom.TagName(element) == "object" && rxVideoVilter.MatchString(dom.InnerHTML(element)) {
 				return false
 			}
 		}
@@ -1752,7 +1815,8 @@ func (ps *Parser) getRowAndColumnCount(table *html.Node) (int, int) {
 }
 
 // markDataTables looks for 'data' (as opposed to 'layout') tables
-// and mark it.
+// and mark it, which similar as used in Firefox:
+// https://searchfox.org/mozilla-central/rev/f82d5c549f046cb64ce5602bfd894b7ae807c8f8/accessible/generic/TableAccessible.cpp#19
 func (ps *Parser) markDataTables(root *html.Node) {
 	tables := dom.GetElementsByTagName(root, "table")
 	for i := 0; i < len(tables); i++ {
@@ -1870,7 +1934,7 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 
 		for i := 0; i < len(elem.Attr); i++ {
 			attr := elem.Attr[i]
-			if attr.Key == "src" || attr.Key == "srcset" {
+			if attr.Key == "src" || attr.Key == "srcset" || attr.Key == "alt" {
 				continue
 			}
 
@@ -1906,6 +1970,12 @@ func (ps *Parser) fixLazyImages(root *html.Node) {
 func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 	if !ps.flags.cleanConditionally {
 		return
+	}
+
+	// Prepare regex video filter
+	rxVideoVilter := ps.AllowedVideoRegex
+	if rxVideoVilter == nil {
+		rxVideoVilter = rxVideosx
 	}
 
 	// Gather counts for other typical elements embedded within.
@@ -1953,6 +2023,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			img := float64(len(dom.GetElementsByTagName(node, "img")))
 			li := float64(len(dom.GetElementsByTagName(node, "li")) - 100)
 			input := float64(len(dom.GetElementsByTagName(node, "input")))
+			headingDensity := ps.getTextDensity(node, "h1", "h2", "h3", "h4", "h5", "h6")
 
 			embedCount := 0
 			embeds := ps.getAllNodesWithTag(node, "object", "embed", "iframe")
@@ -1961,13 +2032,13 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 				// If this embed has attribute that matches video regex,
 				// don't delete it.
 				for _, attr := range embed.Attr {
-					if rxVideos.MatchString(attr.Val) {
+					if rxVideoVilter.MatchString(attr.Val) {
 						return false
 					}
 				}
 
 				// For embed with <object> tag, check inner HTML as well.
-				if dom.TagName(embed) == "object" && rxVideos.MatchString(dom.InnerHTML(embed)) {
+				if dom.TagName(embed) == "object" && rxVideoVilter.MatchString(dom.InnerHTML(embed)) {
 					return false
 				}
 
@@ -1976,14 +2047,31 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 
 			linkDensity := ps.getLinkDensity(node)
 			contentLength := charCount(ps.getInnerText(node, true))
-
-			return (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+			haveToRemove := (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && li > p) ||
 				(input > math.Floor(p/3)) ||
-				(!isList && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+				(!isList && headingDensity < 0.9 && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
 				((embedCount == 1 && contentLength < 75) || embedCount > 1)
+
+			// Allow simple lists of images to remain in pages
+			if isList && haveToRemove {
+				for _, child := range dom.Children(node) {
+					// Don't filter in lists with li's that contain more than one child
+					if len(dom.Children(child)) > 1 {
+						return haveToRemove
+					}
+				}
+
+				// Only allow the list to remain if every li contains an image
+				liCount := len(dom.GetElementsByTagName(node, "li"))
+				if int(img) == liCount {
+					return false
+				}
+			}
+
+			return haveToRemove
 		}
 
 		return false
@@ -2005,14 +2093,28 @@ func (ps *Parser) cleanMatchedNodes(e *html.Node, filter func(*html.Node, string
 }
 
 // cleanHeaders cleans out spurious headers from an Element.
-// Checks things like classnames and link density.
 func (ps *Parser) cleanHeaders(e *html.Node) {
-	for headerIndex := 1; headerIndex < 3; headerIndex++ {
-		headerTag := fmt.Sprintf("h%d", headerIndex)
-		ps.removeNodes(dom.GetElementsByTagName(e, headerTag), func(header *html.Node) bool {
-			return ps.getClassWeight(header) < 0
-		})
+	headingNodes := ps.getAllNodesWithTag(e, "h1", "h2")
+	ps.removeNodes(headingNodes, func(node *html.Node) bool {
+		// Removing header with low class weight
+		if ps.getClassWeight(node) < 0 {
+			ps.logf("removing header with low class weight: %q\n", dom.OuterHTML(node))
+			return true
+		}
+		return false
+	})
+}
+
+// headerDuplicateTitle check if this node is an H1 or H2 element whose content
+// is mostly the same as the article title.
+func (ps *Parser) headerDuplicatesTitle(node *html.Node) bool {
+	if tag := dom.TagName(node); tag != "h1" && tag != "h2" {
+		return false
 	}
+
+	heading := ps.getInnerText(node, false)
+	ps.logf("evaluating similarity of header: %q and %q\n", heading, ps.articleTitle)
+	return ps.textSimilarity(ps.articleTitle, heading) > 0.75
 }
 
 // isProbablyVisible determines if a node is visible.
@@ -2162,3 +2264,37 @@ func (ps *Parser) clearReadabilityAttr(node *html.Node) {
 		ps.clearReadabilityAttr(child)
 	}
 }
+
+func (ps *Parser) log(args ...interface{}) {
+	if ps.Debug {
+		log.Println(args...)
+	}
+}
+
+func (ps *Parser) logf(format string, args ...interface{}) {
+	if ps.Debug {
+		log.Printf(format, args...)
+	}
+}
+
+// UNUSED CODES
+// Codes below these points are defined in original Readability.js but not used,
+// so here we commented it out so it can be used later if necessary.
+
+// var (
+// 	rxExtraneous   = regexp.MustCompile(`(?i)print|archive|comment|discuss|e[\-]?mail|share|reply|all|login|sign|single|utility`)
+// 	rxReplaceFonts = regexp.MustCompile(`(?i)<(/?)font[^>]*>`)
+// 	rxNextLink     = regexp.MustCompile(`(?i)(next|weiter|continue|>([^\|]|$)|»([^\|]|$))`)
+// 	rxPrevLink     = regexp.MustCompile(`(?i)(prev|earl|old|new|<|«)`)
+// )
+
+// // findNode iterates over a NodeList and return the first node that passes
+// // the supplied test function.
+// func (ps *Parser) findNode(nodeList []*html.Node, fn func(*html.Node) bool) *html.Node {
+// 	for i := 0; i < len(nodeList); i++ {
+// 		if fn(nodeList[i]) {
+// 			return nodeList[i]
+// 		}
+// 	}
+// 	return nil
+// }
