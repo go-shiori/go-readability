@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
@@ -30,8 +31,8 @@ var (
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
 	rxHashURL              = regexp.MustCompile(`(?i)^#.+`)
-	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|twitter)\s*:\s*(author|creator|description|title|site_name|image\S*)\s*`)
-	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|image)\s*$`)
+	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|article|twitter)\s*:\s*(author|creator|description|title|site_name|published_time|modified_time|image\S*)\s*`)
+	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|article|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|published_time|modified_time|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
 	rxTitleHierarchySep    = regexp.MustCompile(`(?i) [\\/>»] `)
 	rxTitleRemoveFinalPart = regexp.MustCompile(`(?i)(.*)[\|\-\\/>»] .*`)
@@ -81,17 +82,19 @@ type parseAttempt struct {
 
 // Article is the final readable content.
 type Article struct {
-	Title       string
-	Byline      string
-	Node        *html.Node
-	Content     string
-	TextContent string
-	Length      int
-	Excerpt     string
-	SiteName    string
-	Image       string
-	Favicon     string
-	Language    string
+	Title         string
+	Byline        string
+	Node          *html.Node
+	Content       string
+	TextContent   string
+	Length        int
+	Excerpt       string
+	SiteName      string
+	Image         string
+	Favicon       string
+	Language      string
+	PublishedTime *time.Time
+	ModifiedTime  *time.Time
 }
 
 // Parser is the parser that parses the page to get the readable content.
@@ -1464,20 +1467,41 @@ func (ps *Parser) getArticleMetadata(jsonLd map[string]string) map[string]string
 	// get favicon
 	metadataFavicon := ps.getArticleFavicon()
 
+	// get published date
+	metadataPublishedTime := strOr(
+		jsonLd["datePublished"],
+		values["article:published_time"],
+		values["dcterms.available"],
+		values["dcterms.created"],
+		values["dcterms.issued"],
+		values["weibo:article:create_at"],
+	)
+
+	// get modified date
+	metadataModifiedTime := strOr(
+		jsonLd["dateModified"],
+		values["article:modified_time"],
+		values["dcterms.modified"],
+	)
+
 	// in many sites the meta value is escaped with HTML entities,
 	// so here we need to unescape it
 	metadataTitle = shtml.UnescapeString(metadataTitle)
 	metadataByline = shtml.UnescapeString(metadataByline)
 	metadataExcerpt = shtml.UnescapeString(metadataExcerpt)
 	metadataSiteName = shtml.UnescapeString(metadataSiteName)
+	metadataPublishedTime = shtml.UnescapeString(metadataPublishedTime)
+	metadataModifiedTime = shtml.UnescapeString(metadataModifiedTime)
 
 	return map[string]string{
-		"title":    metadataTitle,
-		"byline":   metadataByline,
-		"excerpt":  metadataExcerpt,
-		"siteName": metadataSiteName,
-		"image":    metadataImage,
-		"favicon":  metadataFavicon,
+		"title":         metadataTitle,
+		"byline":        metadataByline,
+		"excerpt":       metadataExcerpt,
+		"siteName":      metadataSiteName,
+		"image":         metadataImage,
+		"favicon":       metadataFavicon,
+		"publishedTime": metadataPublishedTime,
+		"modifiedTime":  metadataModifiedTime,
 	}
 }
 

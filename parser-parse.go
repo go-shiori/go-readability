@@ -5,6 +5,7 @@ import (
 	"io"
 	nurl "net/url"
 	"strings"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
@@ -113,17 +114,57 @@ func (ps *Parser) ParseDocument(doc *html.Node, pageURL *nurl.URL) (Article, err
 	validByline := strings.ToValidUTF8(finalByline, "")
 	validExcerpt := strings.ToValidUTF8(excerpt, "")
 
+	publishedTime := ps.getDate(metadata, "publishedTime")
+	modifiedTime := ps.getDate(metadata, "modifiedTime")
+
 	return Article{
-		Title:       validTitle,
-		Byline:      validByline,
-		Node:        readableNode,
-		Content:     finalHTMLContent,
-		TextContent: finalTextContent,
-		Length:      charCount(finalTextContent),
-		Excerpt:     validExcerpt,
-		SiteName:    metadata["siteName"],
-		Image:       metadata["image"],
-		Favicon:     metadata["favicon"],
-		Language:    ps.articleLang,
+		Title:         validTitle,
+		Byline:        validByline,
+		Node:          readableNode,
+		Content:       finalHTMLContent,
+		TextContent:   finalTextContent,
+		Length:        charCount(finalTextContent),
+		Excerpt:       validExcerpt,
+		SiteName:      metadata["siteName"],
+		Image:         metadata["image"],
+		Favicon:       metadata["favicon"],
+		Language:      ps.articleLang,
+		PublishedTime: publishedTime,
+		ModifiedTime:  modifiedTime,
 	}, nil
+}
+
+// getDate tries to get a date from metadata, and parse it using a list of known formats.
+func (ps *Parser) getDate(metadata map[string]string, fieldName string) *time.Time {
+	dateStr, ok := metadata[fieldName]
+	if ok && len(dateStr) > 0 {
+		return getParsedDate(dateStr)
+	}
+	return nil
+}
+
+// getParsedDate tries to parse a date string using a list of known formats.
+// If the date string can't be parsed, it will return nil.
+func getParsedDate(dateStr string) *time.Time {
+	// Following formats have been seen in the wild.
+	formats := []string{
+		"2006-01-02T15:04:05.999999999Z07:00",
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04:05+07:00",
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+
+	for i, format := range formats {
+		parsedDate, err := time.Parse(format, dateStr)
+		if err == nil {
+			return &parsedDate
+		} else if i == len(formats)-1 {
+			fmt.Printf("Failed to parse date \"%s\"\n", dateStr)
+		}
+	}
+	return nil
 }
