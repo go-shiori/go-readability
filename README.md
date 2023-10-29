@@ -89,6 +89,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
 	readability "github.com/go-shiori/go-readability"
 )
@@ -103,19 +104,24 @@ var (
 )
 
 func main() {
-	for _, url := range urls {
-		resp, err := http.Get(url)
+	for _, u := range urls {
+		resp, err := http.Get(u)
 		if err != nil {
-			log.Fatalf("failed to download %s: %v\n", url, err)
+			log.Fatalf("failed to download %s: %v\n", u, err)
 		}
 		defer resp.Body.Close()
 
-		article, err := readability.FromReader(resp.Body, url)
+		parsedURL, err := url.Parse(u)
 		if err != nil {
-			log.Fatalf("failed to parse %s: %v\n", url, err)
+			log.Fatalf("error parsing url")
 		}
 
-		fmt.Printf("URL     : %s\n", url)
+		article, err := readability.FromReader(resp.Body, parsedURL)
+		if err != nil {
+			log.Fatalf("failed to parse %s: %v\n", u, err)
+		}
+
+		fmt.Printf("URL     : %s\n", u)
 		fmt.Printf("Title   : %s\n", article.Title)
 		fmt.Printf("Author  : %s\n", article.Byline)
 		fmt.Printf("Length  : %d\n", article.Length)
@@ -126,6 +132,7 @@ func main() {
 		fmt.Println()
 	}
 }
+
 ```
 
 ## Command Line Usage
