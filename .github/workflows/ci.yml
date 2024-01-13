@@ -42,13 +42,4 @@ jobs:
     - name: Run tests
       run: |
         set -euo pipefail
-        go test -json -v ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
-     
-        # Upload the original go test log as an artifact for later review.
-    - name: Upload test log
-      uses: actions/upload-artifact@v2
-      if: always()
-      with:
-        name: test-log
-        path: /tmp/gotest.log
-        if-no-files-found: error
+        go test -json -v ./... 2>&1 | gotestfmt
