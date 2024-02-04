@@ -9,6 +9,7 @@ import (
 	fp "path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-shiori/dom"
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -20,12 +21,14 @@ var (
 )
 
 type ExpectedMetadata struct {
-	Title      string `json:"title,omitempty"`
-	Byline     string `json:"byline,omitempty"`
-	Excerpt    string `json:"excerpt,omitempty"`
-	Language   string `json:"language,omitempty"`
-	SiteName   string `json:"siteName,omitempty"`
-	Readerable bool   `json:"readerable"`
+	Title         string `json:"title,omitempty"`
+	Byline        string `json:"byline,omitempty"`
+	Excerpt       string `json:"excerpt,omitempty"`
+	Language      string `json:"language,omitempty"`
+	SiteName      string `json:"siteName,omitempty"`
+	Readerable    bool   `json:"readerable"`
+	PublishedTime string `json:"publishedTime,omitempty"`
+	ModifiedTime  string `json:"modifiedTime,omitempty"`
 }
 
 func Test_parser(t *testing.T) {
@@ -94,6 +97,14 @@ func Test_parser(t *testing.T) {
 
 			if metadata.Language != article.Language {
 				t1.Errorf("language, want %q got %q\n", metadata.Language, article.Language)
+			}
+
+			if !timesAreEqual(metadata.PublishedTime, article.PublishedTime) {
+				t1.Errorf("date published, want %q got %q\n", metadata.PublishedTime, article.PublishedTime)
+			}
+
+			if !timesAreEqual(metadata.ModifiedTime, article.ModifiedTime) {
+				t1.Errorf("date modified, want %q got %q\n", metadata.ModifiedTime, article.ModifiedTime)
 			}
 		})
 	}
@@ -251,4 +262,17 @@ func getNodeExcerpt(node *html.Node) string {
 		return outer
 	}
 	return outer[:120]
+}
+
+func timesAreEqual(metadataTimeString string, parsedTime *time.Time) bool {
+	if metadataTimeString == "" && parsedTime == nil {
+		return true
+	}
+
+	if metadataTimeString == "" || parsedTime == nil {
+		return false
+	}
+
+	metadataTime := getParsedDate(metadataTimeString)
+	return metadataTime.Equal(*parsedTime)
 }
