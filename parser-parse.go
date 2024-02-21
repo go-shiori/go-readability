@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/araddon/dateparse"
 	"github.com/go-shiori/dom"
 	"golang.org/x/net/html"
 )
@@ -146,25 +147,11 @@ func (ps *Parser) getDate(metadata map[string]string, fieldName string) *time.Ti
 // getParsedDate tries to parse a date string using a list of known formats.
 // If the date string can't be parsed, it will return nil.
 func getParsedDate(dateStr string) *time.Time {
-	// Following formats have been seen in the wild.
-	formats := []string{
-		"2006-01-02T15:04:05.999999999Z07:00",
-		"2006-01-02T15:04:05.999999999",
-		"2006-01-02T15:04:05+07:00",
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02T15:04:05",
-		"2006-01-02T15:04",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
 
-	for i, format := range formats {
-		parsedDate, err := time.Parse(format, dateStr)
-		if err == nil {
-			return &parsedDate
-		} else if i == len(formats)-1 {
-			fmt.Printf("Failed to parse date \"%s\"\n", dateStr)
-		}
+	d, err := dateparse.ParseAny(dateStr)
+	if err != nil {
+		fmt.Printf("Failed to parse date \"%s\"\n", dateStr)
+		return nil
 	}
-	return nil
+	return &d
 }
