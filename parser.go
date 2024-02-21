@@ -39,6 +39,7 @@ var (
 	rxTitleRemove1stPart   = regexp.MustCompile(`(?i)[^\|\-\\/>»]*[\|\-\\/>»](.*)`)
 	rxTitleAnySeparator    = regexp.MustCompile(`(?i)[\|\-\\/>»]+`)
 	rxDisplayNone          = regexp.MustCompile(`(?i)display\s*:\s*none`)
+	rxVisibilityHidden     = regexp.MustCompile(`(?i)visibility\s*:\s*hidden`)
 	rxSentencePeriod       = regexp.MustCompile(`(?i)\.( |$)`)
 	rxShareElements        = regexp.MustCompile(`(?i)(\b|_)(share|sharedaddy)(\b|_)`)
 	rxFaviconSize          = regexp.MustCompile(`(?i)(\d+)x(\d+)`)
@@ -2161,6 +2162,7 @@ func (ps *Parser) isProbablyVisible(node *html.Node) bool {
 	// with SVG and MathML nodes. Also check for "fallback-image" so that
 	// Wikimedia Math images are displayed
 	return (nodeStyle == "" || !rxDisplayNone.MatchString(nodeStyle)) &&
+		(nodeStyle == "" || !rxVisibilityHidden.MatchString(nodeStyle)) &&
 		!dom.HasAttribute(node, "hidden") &&
 		(nodeAriaHidden == "" || nodeAriaHidden != "true" || strings.Contains(className, "fallback-image"))
 }
