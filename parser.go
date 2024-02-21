@@ -50,6 +50,9 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org$`)
+	// Commas as used in Latin, Sindhi, Chinese and various other scripts.
+	// see: https://en.wikipedia.org/wiki/Comma#Comma_variants
+	rxCommas = regexp.MustCompile("\u002C|\u060C|\uFE50|\uFE10|\uFE11|\u2E41|\u2E34|\u2E32|\uFF0C")
 )
 
 // Constants that used by readability.
@@ -931,7 +934,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += strings.Count(innerText, ",")
+			contentScore += len(rxCommas.Split(innerText, -1)) - 1
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
 			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
