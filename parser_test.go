@@ -106,6 +106,7 @@ func Test_parser(t *testing.T) {
 			if !timesAreEqual(metadata.ModifiedTime, article.ModifiedTime) {
 				t1.Errorf("date modified, want %q got %q\n", metadata.ModifiedTime, article.ModifiedTime)
 			}
+
 		})
 	}
 }
