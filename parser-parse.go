@@ -156,14 +156,15 @@ func getParsedDate(dateStr string) *time.Time {
 		"2006-01-02T15:04",
 		"2006-01-02 15:04:05",
 		"2006-01-02",
+		"20060102T1504-0700",
+		"20060102T1504",
+		"20060102",
 	}
 
-	for i, format := range formats {
+	for _, format := range formats {
 		parsedDate, err := time.Parse(format, dateStr)
 		if err == nil {
 			return &parsedDate
-		} else if i == len(formats)-1 {
-			fmt.Printf("Failed to parse date \"%s\"\n", dateStr)
 		}
 	}
 	return nil
