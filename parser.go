@@ -1385,7 +1385,6 @@ func (ps *Parser) getJSONLD() (map[string]string, error) {
 
 		// DatePublished
 		if datePublished, isString := parsed["datePublished"].(string); isString {
-			fmt.Println(datePublished)
 			metadata["datePublished"] = datePublished
 		}
 
