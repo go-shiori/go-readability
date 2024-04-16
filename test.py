@@ -26,14 +26,15 @@ root_dir = os.path.abspath(os.path.dirname(__file__))
 library = ctypes.cdll.LoadLibrary(f'{root_dir}/libparser{file_ext}')
 
 parse = library.parse
-parse.argtypes = [ctypes.c_char_p]
+parse.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
 parse.restype = ctypes.c_char_p
 
 freeMemory = library.freeMemory
 freeMemory.argtypes = [ctypes.c_char_p]
 
 def parse_html(html_content, url):
-    result = parse(html_content.encode('utf-8'), url.encode('utf-8'))
+    url = url.encode("utf-8")
+    result = parse(html_content.encode('utf-8'), url)
     data = json.loads(ctypes.c_char_p(result).value.decode('utf-8'))
     freeMemory(data["id"].encode('utf-8'))
     return data
@@ -50,4 +51,3 @@ for file in glob("test-pages/*/source.html"):
     idx += 1
 
 print(idx, process.memory_info().rss / 1024**2, time.time() - s)
-    

@@ -7,13 +7,14 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/go-shiori/dom"
-	readability "github.com/go-shiori/go-readability"
 	nurl "net/url"
 	"strings"
-	"unsafe"
 	"sync"
+	"unsafe"
+
+	"github.com/go-shiori/dom"
+	readability "github.com/go-shiori/go-readability"
+	"github.com/google/uuid"
 )
 
 var unsafePointers = make(map[string]*C.char)
@@ -25,7 +26,7 @@ var sessionsPoolLock = sync.Mutex{}
 
 func return_safe_result(result string, outputId string) *C.char {
 	resultString := C.CString(result)
-    unsafePointersLock.Lock()
+	unsafePointersLock.Lock()
 	unsafePointers[outputId] = resultString
 	defer unsafePointersLock.Unlock()
 	return resultString
@@ -43,20 +44,20 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 	// Parse URL
 	parsedURL, err := nurl.ParseRequestURI(urlStr)
 	if err != nil {
-		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing URL: " + err.Error()), outputId)
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing URL: "+err.Error()), outputId)
 	}
 
 	// Read HTML content
 	reader := strings.NewReader(htmlStr)
 	doc, err := dom.Parse(reader)
 	if err != nil {
-		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing HTML content: " + err.Error()), outputId)
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing HTML content: "+err.Error()), outputId)
 	}
 
 	// Extract readable content
 	article, err := readability.FromDocument(doc, parsedURL)
 	if err != nil {
-		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error extracting content: " + err.Error()), outputId)
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error extracting content: "+err.Error()), outputId)
 	}
 
 	// Prepare output
@@ -73,8 +74,8 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 			Readerable bool   `json:"readerable"`
 		} `json:"metadata"`
 	}{
-		ID: outputId,
-		HTML: dom.OuterHTML(article.Node),
+		ID:    outputId,
+		HTML:  dom.OuterHTML(article.Node),
 		ERROR: "",
 		Metadata: struct {
 			Title      string `json:"title,omitempty"`
@@ -96,13 +97,12 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 	// Serialize to JSON
 	result, err := json.Marshal(output)
 	if err != nil {
-		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error serializing output: " + err.Error()), outputId)
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error serializing output: "+err.Error()), outputId)
 	}
 
 	// Return result as C string
 	return return_safe_result(string(result), outputId)
 }
-
 
 //export freeMemory
 func freeMemory(responseId *C.char) {
@@ -132,4 +132,3 @@ func main() {
 		}
 	}()
 }
-
