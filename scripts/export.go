@@ -18,13 +18,24 @@ import (
 
 var unsafePointers = make(map[string]*C.char)
 var unsafePointersLock = sync.Mutex{}
-var errorFormat = "{\"err\": \"%v\"}"
+var errorFormat = "{\"id\": \"%v\", \"error\": \"%v\"}"
 
 var sessionsPool = make(map[string]*sync.Pool)
 var sessionsPoolLock = sync.Mutex{}
 
+func return_safe_result(result string, outputId string) *C.char {
+	resultString := C.CString(result)
+    unsafePointersLock.Lock()
+	unsafePointers[outputId] = resultString
+	defer unsafePointersLock.Unlock()
+	return resultString
+}
+
 //export parse
 func parse(htmlContent *C.char, pageURL *C.char) *C.char {
+
+	outputId := uuid.New().String()
+
 	// Convert C strings to Go strings
 	htmlStr := C.GoString(htmlContent)
 	urlStr := C.GoString(pageURL)
@@ -32,28 +43,27 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 	// Parse URL
 	parsedURL, err := nurl.ParseRequestURI(urlStr)
 	if err != nil {
-		return C.CString(fmt.Sprintf("Error parsing URL: %v", err))
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing URL: " + err.Error()), outputId)
 	}
 
 	// Read HTML content
 	reader := strings.NewReader(htmlStr)
 	doc, err := dom.Parse(reader)
 	if err != nil {
-		return C.CString(fmt.Sprintf("Error parsing HTML content: %v", err))
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error parsing HTML content: " + err.Error()), outputId)
 	}
 
 	// Extract readable content
 	article, err := readability.FromDocument(doc, parsedURL)
 	if err != nil {
-		return C.CString(fmt.Sprintf("Error extracting content: %v", err))
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error extracting content: " + err.Error()), outputId)
 	}
-
-	outputId := uuid.New().String()
 
 	// Prepare output
 	output := struct {
 		ID       string `json:"id"`
 		HTML     string `json:"html"`
+		ERROR    string `json:"error"`
 		Metadata struct {
 			Title      string `json:"title,omitempty"`
 			Byline     string `json:"byline,omitempty"`
@@ -65,6 +75,7 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 	}{
 		ID: outputId,
 		HTML: dom.OuterHTML(article.Node),
+		ERROR: "",
 		Metadata: struct {
 			Title      string `json:"title,omitempty"`
 			Byline     string `json:"byline,omitempty"`
@@ -85,17 +96,11 @@ func parse(htmlContent *C.char, pageURL *C.char) *C.char {
 	// Serialize to JSON
 	result, err := json.Marshal(output)
 	if err != nil {
-		return C.CString(fmt.Sprintf("Error serializing output: %v", err))
+		return return_safe_result(fmt.Sprintf(errorFormat, outputId, "Error serializing output: " + err.Error()), outputId)
 	}
 
-	resultString := C.CString(string(result))
-
-	unsafePointersLock.Lock()
-	unsafePointers[outputId] = resultString
-	defer unsafePointersLock.Unlock()
-
 	// Return result as C string
-	return resultString
+	return return_safe_result(string(result), outputId)
 }
 
 
