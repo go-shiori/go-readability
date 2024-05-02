@@ -3,7 +3,6 @@ package readability
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	fp "path/filepath"
@@ -33,7 +32,7 @@ type ExpectedMetadata struct {
 
 func Test_parser(t *testing.T) {
 	testDir := "test-pages"
-	testItems, err := ioutil.ReadDir(testDir)
+	testItems, err := os.ReadDir(testDir)
 	if err != nil {
 		t.Errorf("\nfailed to read test directory")
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	nurl "net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -167,5 +168,13 @@ func getParsedDate(dateStr string) *time.Time {
 			return &parsedDate
 		}
 	}
+
+	i, err := strconv.ParseInt(dateStr, 10, 64)
+	if err == nil {
+		tm := time.Unix(i, 0)
+
+		return &tm
+	}
+
 	return nil
 }
