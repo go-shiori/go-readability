@@ -155,8 +155,10 @@ Usage:
   go-readability [flags] source
 
 Flags:
-  -h, --help       help for go-readability
-  -m, --metadata   only print the page's metadata
+  -h, --help          help for go-readability
+  -l, --http string   start the http server at the specified address
+  -m, --metadata      only print the page's metadata
+  -t, --text          only print the page's text
 ```
 
 ## Licenses

@@ -27,6 +27,7 @@ const index = `<!DOCTYPE HTML>
   <fieldset>
    <legend>Get readability content</legend>
    <p><label for="url">URL </label><input type="url" name="url" style="width:90%"></p>
+   <p><input type="checkbox" name="text" value="true">text only</p>
    <p><input type="checkbox" name="metadata" value="true">only get the page's metadata</p>
   </fieldset>
   <p><input type="submit"></p>
@@ -45,6 +46,7 @@ func main() {
 
 	rootCmd.Flags().StringP("http", "l", "", "start the http server at the specified address")
 	rootCmd.Flags().BoolP("metadata", "m", false, "only print the page's metadata")
+	rootCmd.Flags().BoolP("text", "t", false, "only print the page's text")
 
 	err := rootCmd.Execute()
 	if err != nil {
@@ -63,8 +65,9 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 
 	// Get cmd parameter
 	metadataOnly, _ := cmd.Flags().GetBool("metadata")
+	textOnly, _ := cmd.Flags().GetBool("text")
 	if len(args) > 0 {
-		content, err := getContent(args[0], metadataOnly)
+		content, err := getContent(args[0], metadataOnly, textOnly)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -76,14 +79,14 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 }
 
 func httpHandler(w http.ResponseWriter, r *http.Request) {
-	metadata := r.URL.Query().Get("metadata")
-	metadataOnly, _ := strconv.ParseBool(metadata)
+	metadataOnly, _ := strconv.ParseBool(r.URL.Query().Get("metadata"))
+	textOnly, _ := strconv.ParseBool(r.URL.Query().Get("text"))
 	url := r.URL.Query().Get("url")
 	if url == "" {
 		w.Write([]byte(index))
 	} else {
 		log.Println("process URL", url)
-		content, err := getContent(url, metadataOnly)
+		content, err := getContent(url, metadataOnly, textOnly)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -91,12 +94,14 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if metadataOnly {
 			w.Header().Set("Content-Type", "application/json")
+		} else if textOnly {
+			w.Header().Set("Content-Type", "text/plain")
 		}
 		w.Write([]byte(content))
 	}
 }
 
-func getContent(srcPath string, metadataOnly bool) (string, error) {
+func getContent(srcPath string, metadataOnly, textOnly bool) (string, error) {
 	// Open or fetch web page that will be parsed
 	var (
 		pageURL   *nurl.URL
@@ -154,6 +159,10 @@ func getContent(srcPath string, metadataOnly bool) (string, error) {
 		}
 
 		return string(prettyJSON), nil
+	}
+
+	if textOnly {
+		return article.TextContent, nil
 	}
 
 	return article.Content, nil
