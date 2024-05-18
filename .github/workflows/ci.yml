@@ -3,15 +3,14 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 permissions:
   contents: read
 
 jobs:
-  # Test golangci-lint for go-version define in go.mod
   golangci:
     runs-on: ubuntu-latest
     steps:
@@ -26,8 +25,9 @@ jobs:
           version: latest
           only-new-issues: true
 
-  tests:
-    names: Go unit tests
+  test:
+    runs-on: ubuntu-latest
+    name: Tests
     steps:
     - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
