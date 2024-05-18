@@ -103,14 +103,14 @@ func getContent(srcPath string, metadataOnly bool) (string, error) {
 		srcReader io.Reader
 	)
 
-	if url, isURL := validateURL(srcPath); isURL {
+	if _, isURL := validateURL(srcPath); isURL {
 		resp, err := http.Get(srcPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch web page: %v", err)
 		}
 		defer resp.Body.Close()
 
-		pageURL = url
+		pageURL = resp.Request.URL
 		srcReader = resp.Body
 	} else {
 		srcFile, err := os.Open(srcPath)
