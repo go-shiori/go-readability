@@ -145,8 +145,8 @@ func NewParser() Parser {
 		NTopCandidates:    5,
 		CharThresholds:    500,
 		ClassesToPreserve: []string{"page"},
-		KeepClasses:       false,
-		TagsToScore:       []string{"section", "h2", "h3", "h4", "h5", "h6", "p", "td", "pre"},
+		KeepClasses:       true,
+		TagsToScore:       []string{"section", "h2", "h3", "h4", "h5", "h6", "p", "td", "pre", "code"},
 		Debug:             false,
 	}
 }
@@ -541,7 +541,9 @@ func (ps *Parser) setNodeTag(node *html.Node, newTagName string) {
 // prepArticle prepares the article node for display. Clean out any
 // inline styles, iframes, forms, strip extraneous <p> tags, etc.
 func (ps *Parser) prepArticle(articleContent *html.Node) {
-	ps.cleanStyles(articleContent)
+	if !ps.KeepClasses {
+		ps.cleanStyles(articleContent)
+	}
 
 	// Check for data tables before we continue, to avoid removing
 	// items in those tables, which will often be isolated even
@@ -1186,13 +1188,13 @@ func (ps *Parser) grabArticle() *html.Node {
 			// the original.
 			firstChild := dom.FirstElementChild(articleContent)
 			if firstChild != nil && dom.TagName(firstChild) == "div" {
-				dom.SetAttribute(firstChild, "id", "readability-page-1")
-				dom.SetAttribute(firstChild, "class", "page")
+				dom.SetAttribute(firstChild, "id", "readability-page")
+				dom.SetAttribute(firstChild, "class", "post")
 			}
 		} else {
 			div := dom.CreateElement("div")
-			dom.SetAttribute(div, "id", "readability-page-1")
-			dom.SetAttribute(div, "class", "page")
+			dom.SetAttribute(div, "id", "readability-page")
+			dom.SetAttribute(div, "class", "post")
 			for articleContent.FirstChild != nil {
 				dom.AppendChild(div, articleContent.FirstChild)
 			}
