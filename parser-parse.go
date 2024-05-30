@@ -151,7 +151,7 @@ func getParsedDate(dateStr string) *time.Time {
 
 	d, err := dateparse.ParseAny(dateStr)
 	if err != nil {
-		log.Printf("Failed to parse date \"%s\": %w\n", dateStr, err)
+		log.Printf("Failed to parse date \"%s\": %v\n", dateStr, err)
 		return nil
 	}
 	return &d
