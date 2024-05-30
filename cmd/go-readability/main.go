@@ -74,7 +74,7 @@ func rootCmdHandler(cmd *cobra.Command, args []string) {
 
 		fmt.Println(content)
 	} else {
-		cmd.Help()
+		_ = cmd.Help()
 	}
 }
 
@@ -83,7 +83,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	textOnly, _ := strconv.ParseBool(r.URL.Query().Get("text"))
 	url := r.URL.Query().Get("url")
 	if url == "" {
-		w.Write([]byte(index))
+		if _, err := w.Write([]byte(index)); err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	} else {
 		log.Println("process URL", url)
 		content, err := getContent(url, metadataOnly, textOnly)
@@ -97,7 +101,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		} else if textOnly {
 			w.Header().Set("Content-Type", "text/plain")
 		}
-		w.Write([]byte(content))
+		if _, err := w.Write([]byte(content)); err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 }
 
