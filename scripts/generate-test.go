@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	nurl "net/url"
@@ -49,7 +48,7 @@ func main() {
 
 	// If test name is 'all', generate test case for all existing test directory
 	if testName == "all" {
-		dirItems, err := ioutil.ReadDir("test-pages")
+		dirItems, err := os.ReadDir("test-pages")
 		if err != nil {
 			log.Fatalf("failed to read test dir: %v\n", err)
 		}
@@ -149,7 +148,9 @@ func downloadWebPage(srcURL string, dstPath string) error {
 	defer resp.Body.Close()
 
 	// Save to file
-	os.MkdirAll(fp.Dir(dstPath), os.ModePerm)
+	if err := os.MkdirAll(fp.Dir(dstPath), os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		return fmt.Errorf("failed to save file: %v", err)

@@ -955,7 +955,7 @@ func (ps *Parser) grabArticle() *html.Node {
 				// - parent:             1 (no division)
 				// - grandparent:        2
 				// - great grandparent+: ancestor level * 3
-				scoreDivider := 1
+				var scoreDivider int
 				switch level {
 				case 0:
 					scoreDivider = 1
