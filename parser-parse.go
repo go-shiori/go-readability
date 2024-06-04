@@ -3,6 +3,7 @@ package readability
 import (
 	"fmt"
 	"io"
+	"log"
 	nurl "net/url"
 	"strings"
 	"time"
