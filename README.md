@@ -140,7 +140,7 @@ func main() {
 You can also use `go-readability` as command line app. To do that, first install the CLI :
 
 ```
-go get -u -v github.com/go-shiori/go-readability/cmd/...
+go install github.com/go-shiori/go-readability/cmd/...
 ```
 
 Now you can use it by running `go-readability` in your terminal :
