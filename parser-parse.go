@@ -3,7 +3,6 @@ package readability
 import (
 	"fmt"
 	"io"
-	"log"
 	nurl "net/url"
 	"strings"
 	"time"
@@ -140,18 +139,17 @@ func (ps *Parser) ParseDocument(doc *html.Node, pageURL *nurl.URL) (Article, err
 func (ps *Parser) getDate(metadata map[string]string, fieldName string) *time.Time {
 	dateStr, ok := metadata[fieldName]
 	if ok && len(dateStr) > 0 {
-		return getParsedDate(dateStr)
+		return ps.getParsedDate(dateStr)
 	}
 	return nil
 }
 
 // getParsedDate tries to parse a date string using a list of known formats.
 // If the date string can't be parsed, it will return nil.
-func getParsedDate(dateStr string) *time.Time {
-
+func (ps *Parser) getParsedDate(dateStr string) *time.Time {
 	d, err := dateparse.ParseAny(dateStr)
 	if err != nil {
-		log.Printf("Failed to parse date \"%s\": %v\n", dateStr, err)
+		ps.logf("failed to parse date \"%s\": %v\n", dateStr, err)
 		return nil
 	}
 	return &d

@@ -273,6 +273,7 @@ func timesAreEqual(metadataTimeString string, parsedTime *time.Time) bool {
 		return false
 	}
 
-	metadataTime := getParsedDate(metadataTimeString)
+	ps := Parser{}
+	metadataTime := ps.getParsedDate(metadataTimeString)
 	return metadataTime.Equal(*parsedTime)
 }
