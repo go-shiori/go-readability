@@ -21,7 +21,7 @@ import (
 // All of the regular expressions in use within readability.
 // Defined up here so we don't instantiate them repeatedly in loops *.
 var (
-	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
+	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
@@ -1764,7 +1764,7 @@ func (ps *Parser) clean(node *html.Node, tag string) {
 	isEmbed := indexOf([]string{"object", "embed", "iframe"}, tag) != -1
 	rxVideoVilter := ps.AllowedVideoRegex
 	if rxVideoVilter == nil {
-		rxVideoVilter = rxVideosx
+		rxVideoVilter = rxVideos
 	}
 
 	ps.removeNodes(dom.GetElementsByTagName(node, tag), func(element *html.Node) bool {
@@ -2001,7 +2001,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 	// Prepare regex video filter
 	rxVideoVilter := ps.AllowedVideoRegex
 	if rxVideoVilter == nil {
-		rxVideoVilter = rxVideosx
+		rxVideoVilter = rxVideos
 	}
 
 	// Gather counts for other typical elements embedded within.
