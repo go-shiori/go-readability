@@ -14,14 +14,13 @@ import (
 	"time"
 
 	"github.com/go-shiori/dom"
+	"github.com/go-shiori/go-readability/internal/re2go"
 	"golang.org/x/net/html"
 )
 
 // All of the regular expressions in use within readability.
 // Defined up here so we don't instantiate them repeatedly in loops *.
 var (
-	rxUnlikelyCandidates   = regexp.MustCompile(`(?i)-ad-|ai2html|banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|footer|gdpr|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
-	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|content|main|shadow`)
 	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
 	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
 	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
@@ -51,9 +50,6 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org\/?$`)
-	// Commas as used in Latin, Sindhi, Chinese and various other scripts.
-	// see: https://en.wikipedia.org/wiki/Comma#Comma_variants
-	rxCommas = regexp.MustCompile("\u002C|\u060C|\uFE50|\uFE10|\uFE11|\u2E41|\u2E34|\u2E32|\uFF0C")
 )
 
 // Constants that used by readability.
@@ -833,8 +829,8 @@ func (ps *Parser) grabArticle() *html.Node {
 			// Remove unlikely candidates
 			nodeTagName := dom.TagName(node)
 			if ps.flags.stripUnlikelys {
-				if rxUnlikelyCandidates.MatchString(matchString) &&
-					!rxOkMaybeItsACandidate.MatchString(matchString) &&
+				if re2go.IsUnlikelyCandidates(matchString) &&
+					!re2go.MaybeItsACandidate(matchString) &&
 					!ps.hasAncestorTag(node, "table", 3, nil) &&
 					!ps.hasAncestorTag(node, "code", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
@@ -935,7 +931,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += len(rxCommas.Split(innerText, -1)) - 1
+			contentScore += re2go.CountCommas(innerText)
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
 			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
