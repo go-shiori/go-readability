@@ -23,7 +23,6 @@ import (
 var (
 	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
 	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
-	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
 	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
@@ -718,7 +717,7 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	rel := dom.GetAttribute(node, "rel")
 	itemprop := dom.GetAttribute(node, "itemprop")
 	nodeText := dom.TextContent(node)
-	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) &&
+	if (rel == "author" || strings.Contains(itemprop, "author") || re2go.IsByline(matchString)) &&
 		ps.isValidByline(nodeText) {
 		nodeText = strings.TrimSpace(nodeText)
 		nodeText = strings.Join(strings.Fields(nodeText), " ")
