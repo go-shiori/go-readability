@@ -14,19 +14,14 @@ import (
 	"time"
 
 	"github.com/go-shiori/dom"
+	"github.com/go-shiori/go-readability/internal/re2go"
 	"golang.org/x/net/html"
 )
 
 // All of the regular expressions in use within readability.
 // Defined up here so we don't instantiate them repeatedly in loops *.
 var (
-	rxUnlikelyCandidates   = regexp.MustCompile(`(?i)-ad-|ai2html|banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|footer|gdpr|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote`)
-	rxOkMaybeItsACandidate = regexp.MustCompile(`(?i)and|article|body|column|content|main|shadow`)
-	rxPositive             = regexp.MustCompile(`(?i)article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story`)
-	rxNegative             = regexp.MustCompile(`(?i)-ad-|hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|contact|foot|footer|footnote|gdpr|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget`)
-	rxByline               = regexp.MustCompile(`(?i)byline|author|dateline|writtenby|p-author`)
-	rxNormalize            = regexp.MustCompile(`(?i)\s{2,}`)
-	rxVideosx              = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
+	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
 	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
@@ -51,9 +46,6 @@ var (
 	rxJsonLdArticleTypes   = regexp.MustCompile(`(?i)^Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference$`)
 	rxCDATA                = regexp.MustCompile(`^\s*<!\[CDATA\[|\]\]>\s*$`)
 	rxSchemaOrg            = regexp.MustCompile(`(?i)^https?\:\/\/schema\.org\/?$`)
-	// Commas as used in Latin, Sindhi, Chinese and various other scripts.
-	// see: https://en.wikipedia.org/wiki/Comma#Comma_variants
-	rxCommas = regexp.MustCompile("\u002C|\u060C|\uFE50|\uFE10|\uFE11|\u2E41|\u2E34|\u2E32|\uFF0C")
 )
 
 // Constants that used by readability.
@@ -414,7 +406,7 @@ func (ps *Parser) getArticleTitle() string {
 	}
 
 	curTitle = strings.TrimSpace(curTitle)
-	curTitle = rxNormalize.ReplaceAllString(curTitle, " ")
+	curTitle = re2go.NormalizeSpaces(curTitle)
 	// If we now have 4 words or fewer as our title, and either no
 	// 'hierarchical' separators (\, /, > or ») were found in the original
 	// title or we decreased the number of words by more than 1 word, use
@@ -723,7 +715,7 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 	rel := dom.GetAttribute(node, "rel")
 	itemprop := dom.GetAttribute(node, "itemprop")
 	nodeText := dom.TextContent(node)
-	if (rel == "author" || strings.Contains(itemprop, "author") || rxByline.MatchString(matchString)) &&
+	if (rel == "author" || strings.Contains(itemprop, "author") || re2go.IsByline(matchString)) &&
 		ps.isValidByline(nodeText) {
 		nodeText = strings.TrimSpace(nodeText)
 		nodeText = strings.Join(strings.Fields(nodeText), " ")
@@ -833,8 +825,8 @@ func (ps *Parser) grabArticle() *html.Node {
 			// Remove unlikely candidates
 			nodeTagName := dom.TagName(node)
 			if ps.flags.stripUnlikelys {
-				if rxUnlikelyCandidates.MatchString(matchString) &&
-					!rxOkMaybeItsACandidate.MatchString(matchString) &&
+				if re2go.IsUnlikelyCandidates(matchString) &&
+					!re2go.MaybeItsACandidate(matchString) &&
 					!ps.hasAncestorTag(node, "table", 3, nil) &&
 					!ps.hasAncestorTag(node, "code", 3, nil) &&
 					nodeTagName != "body" && nodeTagName != "a" {
@@ -935,7 +927,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += len(rxCommas.Split(innerText, -1)) - 1
+			contentScore += re2go.CountCommas(innerText)
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
 			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
@@ -1672,7 +1664,7 @@ func (ps *Parser) isWhitespace(node *html.Node) bool {
 func (ps *Parser) getInnerText(node *html.Node, normalizeSpaces bool) string {
 	textContent := strings.TrimSpace(dom.TextContent(node))
 	if normalizeSpaces {
-		textContent = rxNormalize.ReplaceAllString(textContent, " ")
+		textContent = re2go.NormalizeSpaces(textContent)
 	}
 	return textContent
 }
@@ -1743,22 +1735,22 @@ func (ps *Parser) getClassWeight(node *html.Node) int {
 
 	// Look for a special classname
 	if nodeClassName := dom.ClassName(node); nodeClassName != "" {
-		if rxNegative.MatchString(nodeClassName) {
+		if re2go.IsNegativeClass(nodeClassName) {
 			weight -= 25
 		}
 
-		if rxPositive.MatchString(nodeClassName) {
+		if re2go.IsPositiveClass(nodeClassName) {
 			weight += 25
 		}
 	}
 
 	// Look for a special ID
 	if nodeID := dom.ID(node); nodeID != "" {
-		if rxNegative.MatchString(nodeID) {
+		if re2go.IsNegativeClass(nodeID) {
 			weight -= 25
 		}
 
-		if rxPositive.MatchString(nodeID) {
+		if re2go.IsPositiveClass(nodeID) {
 			weight += 25
 		}
 	}
@@ -1772,7 +1764,7 @@ func (ps *Parser) clean(node *html.Node, tag string) {
 	isEmbed := indexOf([]string{"object", "embed", "iframe"}, tag) != -1
 	rxVideoVilter := ps.AllowedVideoRegex
 	if rxVideoVilter == nil {
-		rxVideoVilter = rxVideosx
+		rxVideoVilter = rxVideos
 	}
 
 	ps.removeNodes(dom.GetElementsByTagName(node, tag), func(element *html.Node) bool {
@@ -2009,7 +2001,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 	// Prepare regex video filter
 	rxVideoVilter := ps.AllowedVideoRegex
 	if rxVideoVilter == nil {
-		rxVideoVilter = rxVideosx
+		rxVideoVilter = rxVideos
 	}
 
 	// Gather counts for other typical elements embedded within.
