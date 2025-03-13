@@ -1,14 +1,13 @@
 module github.com/go-shiori/go-readability
 
 go 1.23
-
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c
 	github.com/sergi/go-diff v1.1.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.36.0
 )
 
 require (
