@@ -183,12 +183,14 @@ func renderMetadataToFile(original *html.Node, article readability.Article, file
 	defer dstFile.Close()
 
 	metadata := struct {
-		Title      string `json:"title,omitempty"`
-		Byline     string `json:"byline,omitempty"`
-		Excerpt    string `json:"excerpt,omitempty"`
-		Language   string `json:"language,omitempty"`
-		SiteName   string `json:"siteName,omitempty"`
-		Readerable bool   `json:"readerable"`
+		Title         string `json:"title,omitempty"`
+		Byline        string `json:"byline,omitempty"`
+		Excerpt       string `json:"excerpt,omitempty"`
+		Language      string `json:"language,omitempty"`
+		SiteName      string `json:"siteName,omitempty"`
+		Readerable    bool   `json:"readerable"`
+		PublishedTime string `json:"publishedTime,omitempty"`
+		ModifiedTime  string `json:"modifiedTime,omitempty"`
 	}{
 		Title:      article.Title,
 		Byline:     article.Byline,
@@ -196,6 +198,13 @@ func renderMetadataToFile(original *html.Node, article readability.Article, file
 		Language:   article.Language,
 		SiteName:   article.SiteName,
 		Readerable: readability.CheckDocument(original),
+	}
+
+	if article.PublishedTime != nil {
+		metadata.PublishedTime = article.PublishedTime.Format(time.RFC3339Nano)
+	}
+	if article.ModifiedTime != nil {
+		metadata.ModifiedTime = article.ModifiedTime.Format(time.RFC3339Nano)
 	}
 
 	bt, err := json.MarshalIndent(&metadata, "", "    ")
