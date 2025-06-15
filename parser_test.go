@@ -1,6 +1,7 @@
 package readability
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-shiori/dom"
 	"github.com/sergi/go-diff/diffmatchpatch"
@@ -236,14 +238,10 @@ func compareArticleContent(result, expected *html.Node) error {
 
 		comparator := diffmatchpatch.New()
 		diffs := comparator.DiffMain(resultText, expectedText, false)
+		wordDiff := truncatedPrettyDiff(diffs)
 
 		if len(diffs) > 1 {
-			return fmt.Errorf("text content is different\n"+
-				"want  : %s\n"+
-				"got   : %s\n"+
-				"diffs : %s",
-				expectedExcerpt, resultExcerpt,
-				comparator.DiffPrettyText(diffs))
+			return fmt.Errorf("text content is different:\nnode: %s\ntext: %s", resultExcerpt, wordDiff)
 		}
 
 		// Move to next node
@@ -253,6 +251,66 @@ func compareArticleContent(result, expected *html.Node) error {
 	}
 
 	return nil
+}
+
+func truncatedPrettyDiff(diffs []diffmatchpatch.Diff) string {
+	var buf bytes.Buffer
+	for i, d := range diffs {
+		switch d.Type {
+		case diffmatchpatch.DiffInsert:
+			buf.WriteString("\x1B[32m")
+			buf.WriteString("{+")
+			writeTruncatedText(&buf, d.Text, 40, truncateMiddle)
+			buf.WriteString("+}")
+			buf.WriteString("\x1B[m")
+		case diffmatchpatch.DiffDelete:
+			buf.WriteString("\x1B[31m")
+			buf.WriteString("[-")
+			writeTruncatedText(&buf, d.Text, 40, truncateMiddle)
+			buf.WriteString("-]")
+			buf.WriteString("\x1B[m")
+		case diffmatchpatch.DiffEqual:
+			tt := truncateMiddle
+			if i == 0 {
+				tt = truncateLeft
+			} else if i == len(diffs)-1 {
+				tt = truncateRight
+			}
+			writeTruncatedText(&buf, d.Text, 40, tt)
+		default:
+			panic("diff type not implemented: " + d.Type.String())
+		}
+	}
+	return buf.String()
+}
+
+type truncateType int
+
+const (
+	truncateLeft truncateType = iota
+	truncateRight
+	truncateMiddle
+)
+
+func writeTruncatedText(buf *bytes.Buffer, text string, limit int, where truncateType) {
+	n := utf8.RuneCountInString(text)
+	if n <= limit {
+		buf.WriteString(text)
+		return
+	}
+	textRunes := []rune(text)
+	switch where {
+	case truncateLeft:
+		buf.WriteString("<...>")
+		buf.WriteString(string(textRunes[n-limit:]))
+	case truncateRight:
+		buf.WriteString(string(textRunes[:limit]))
+		buf.WriteString("<...>")
+	case truncateMiddle:
+		buf.WriteString(string(textRunes[:limit/2]))
+		buf.WriteString("<...>")
+		buf.WriteString(string(textRunes[n-(limit/2):]))
+	}
 }
 
 func getNodeExcerpt(node *html.Node) string {
