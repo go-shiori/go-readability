@@ -890,8 +890,16 @@ func (ps *Parser) grabArticle() *html.Node {
 				// the scoring algorithm with DIVs with are, in
 				// practice, paragraphs.
 				if ps.hasSingleTagInsideElement(node, "p") && ps.getLinkDensity(node) < 0.25 {
+					divID := dom.ID(node)
+					divClassName := dom.ClassName(node)
 					newNode := dom.Children(node)[0]
 					node, _ = dom.ReplaceChild(node.Parent, newNode, node)
+					if divID != "" && dom.ID(node) == "" {
+						dom.SetAttribute(node, "id", divID)
+					}
+					if divClassName != "" && dom.ClassName(node) == "" {
+						dom.SetAttribute(node, "class", divClassName)
+					}
 					elementsToScore = append(elementsToScore, node)
 				} else if !ps.hasChildBlockElement(node) {
 					ps.setNodeTag(node, "p")
