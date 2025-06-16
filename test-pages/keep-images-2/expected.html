@@ -2,7 +2,13 @@
     <h2>The image-stripping bug</h2>
     <p>The Medium publishing engine wraps PICTURE elements within a DIV within a FIGURE:</p>
     <figure>
-      
+      <p>
+        <picture>
+          <source srcset="http://fakehost/test/photo.avif" type="image/avif"/>
+          <source srcset="http://fakehost/test/photo.webp" type="image/webp"/>
+          
+        </picture>
+      </p>
     </figure>
     <p>However, after this is processed with readability, the FIGURE element will be empty.</p>
     <p>Note that the IMG element does not have the &#34;src&#34; attribute. It seems that the src is populated by client-side JavaScript based on the information in SOURCE elements. Readability removes such IMG elements in &#34;unwrapNoscriptImages&#34;.</p>

@@ -588,7 +588,7 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 				switch node.Data {
 				// At this point, nasty iframes have been removed, only
 				// remain embedded video ones.
-				case "img", "embed", "object", "iframe":
+				case "img", "picture", "embed", "object", "iframe":
 					return true
 				}
 			} else if node.Type == html.TextNode {
