@@ -976,7 +976,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		for i := 0; i < len(candidates); i++ {
 			candidate := candidates[i]
 			candidateScore := ps.getContentScore(candidate) * (1 - ps.getLinkDensity(candidate))
-			ps.logf("candidate %q with score: %f\n", dom.OuterHTML(candidate), candidateScore)
+			ps.logf("candidate %q with score: %f\n", inspectNode(candidate), candidateScore)
 			ps.setContentScore(candidate, candidateScore)
 		}
 
@@ -1009,7 +1009,7 @@ func (ps *Parser) grabArticle() *html.Node {
 			// Move everything (not just elements, also text nodes etc.)
 			// into the container so we even include text directly in the body:
 			for page.FirstChild != nil {
-				ps.logf("moving child out: %q\n", dom.OuterHTML(page.FirstChild))
+				ps.logf("moving child out: %q\n", inspectNode(page.FirstChild))
 				dom.AppendChild(topCandidate, page.FirstChild)
 			}
 
@@ -2124,7 +2124,7 @@ func (ps *Parser) cleanHeaders(e *html.Node) {
 	ps.removeNodes(headingNodes, func(node *html.Node) bool {
 		// Removing header with low class weight
 		if ps.getClassWeight(node) < 0 {
-			ps.logf("removing header with low class weight: %q\n", dom.OuterHTML(node))
+			ps.logf("removing header with low class weight: %q\n", inspectNode(node))
 			return true
 		}
 		return false
@@ -2302,6 +2302,19 @@ func (ps *Parser) logf(format string, args ...interface{}) {
 	if ps.Debug {
 		log.Printf(format, args...)
 	}
+}
+
+// inspectNode wraps a HTML node to use with printf-style functions.
+func inspectNode(node *html.Node) fmt.Stringer {
+	return &inspectedNode{node}
+}
+
+type inspectedNode struct {
+	node *html.Node
+}
+
+func (n *inspectedNode) String() string {
+	return dom.OuterHTML(n.node)
 }
 
 // UNUSED CODES
