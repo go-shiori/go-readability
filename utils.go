@@ -3,7 +3,10 @@ package readability
 import (
 	nurl "net/url"
 	"strings"
+	"unicode"
 	"unicode/utf8"
+
+	"github.com/go-shiori/go-readability/internal/re2go"
 )
 
 // indexOf returns the position of the first occurrence of a
@@ -26,6 +29,33 @@ func wordCount(str string) int {
 // charCount returns number of char in str.
 func charCount(str string) int {
 	return utf8.RuneCountInString(str)
+}
+
+// normalizeWhitespace trims leading and trailing whitespace and collapses all
+// consecutive chains of whitespace as a single space.
+func normalizeWhitespace(str string) string {
+	return re2go.NormalizeSpaces(strings.TrimSpace(str))
+}
+
+// map of ASCII whitespace characters
+var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
+
+// hasContent reports whether a string contains a non-space character.
+func hasContent(str string) bool {
+	for idx := 0; idx < len(str); idx++ {
+		c := str[idx]
+		if c >= utf8.RuneSelf {
+			// If we run into a non-ASCII byte, fall back to the slower
+			// Unicode-aware method on the remaining bytes
+			return strings.ContainsFunc(str[idx:], func(r rune) bool {
+				return !unicode.IsSpace(r)
+			})
+		}
+		if asciiSpace[c] == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // isValidURL checks if URL is valid.
@@ -92,9 +122,4 @@ func strFilter(strs []string, filter func(string) bool) []string {
 		}
 	}
 	return result
-}
-
-func trim(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	return strings.TrimSpace(s)
 }

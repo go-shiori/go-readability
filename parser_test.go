@@ -110,6 +110,60 @@ func Test_parser(t *testing.T) {
 	}
 }
 
+func Test_countCharsAndCommas(t *testing.T) {
+	createElement := func(tagName string, children ...*html.Node) *html.Node {
+		node := &html.Node{
+			Type: html.ElementNode,
+			Data: tagName,
+		}
+		for _, c := range children {
+			node.AppendChild(c)
+		}
+		return node
+	}
+	textNode := func(text string) *html.Node {
+		return &html.Node{
+			Type: html.TextNode,
+			Data: text,
+		}
+	}
+
+	tests := []struct {
+		name   string
+		node   *html.Node
+		chars  int
+		commas int
+	}{
+		{
+			name: "traverse node descendants",
+			node: createElement("div",
+				textNode("hello again "),
+				createElement("b", textNode("world,")),
+				textNode(" peace"),
+			),
+			chars:  24,
+			commas: 1,
+		},
+		{
+			name:   "commas in different languages",
+			node:   textNode("now,its،a mixed﹐commas︐from︑various⹁place⸴and⸲country，"),
+			chars:  54,
+			commas: 9,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotChars, gotCommas := countCharsAndCommas(tt.node)
+			if gotChars != tt.chars {
+				t.Errorf("countCharsAndCommas() chars = %v, want %v", gotChars, tt.chars)
+			}
+			if gotCommas != tt.commas {
+				t.Errorf("countCharsAndCommas() commas = %v, want %v", gotCommas, tt.commas)
+			}
+		})
+	}
+}
+
 func extractSourceFile(path string) (Article, *html.Node, *html.Node, error) {
 	// Open source file
 	f, err := os.Open(path)
