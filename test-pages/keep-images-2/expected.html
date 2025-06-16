@@ -1,0 +1,11 @@
+<div id="readability-page-1" class="page"><article>
+    <h2>The image-stripping bug</h2>
+    <p>The Medium publishing engine wraps PICTURE elements within a DIV within a FIGURE:</p>
+    <figure>
+      
+    </figure>
+    <p>However, after this is processed with readability, the FIGURE element will be empty.</p>
+    <p>Note that the IMG element does not have the &#34;src&#34; attribute. It seems that the src is populated by client-side JavaScript based on the information in SOURCE elements. Readability removes such IMG elements in &#34;unwrapNoscriptImages&#34;.</p>
+    <p>Then, the DIV is converted to P by logic in code commented with &#34;Turn all divs that don&#39;t have children block level lements into p&#34;.</p>
+    <p>Finally, because the new P is considered empty (it has no text nor images), it is removed by the &#34;Remove extra paragraphs&#34; logic.</p>
+  </article></div>
