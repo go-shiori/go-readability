@@ -581,15 +581,37 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 
 	// Remove extra paragraphs
 	ps.removeNodes(dom.GetElementsByTagName(articleContent, "p"), func(p *html.Node) bool {
-		imgCount := len(dom.GetElementsByTagName(p, "img"))
-		embedCount := len(dom.GetElementsByTagName(p, "embed"))
-		objectCount := len(dom.GetElementsByTagName(p, "object"))
-		// At this point, nasty iframes have been removed, only
-		// remain embedded video ones.
-		iframeCount := len(dom.GetElementsByTagName(p, "iframe"))
-		totalCount := imgCount + embedCount + objectCount + iframeCount
+		// Detect any content that looks like images, embeds, or text
+		var findContent func(*html.Node) bool
+		findContent = func(node *html.Node) bool {
+			if node.Type == html.ElementNode {
+				switch node.Data {
+				// At this point, nasty iframes have been removed, only
+				// remain embedded video ones.
+				case "img", "embed", "object", "iframe":
+					return true
+				}
+			} else if node.Type == html.TextNode {
+				// Detect non-whitespace text content
+				if strings.TrimSpace(node.Data) != "" {
+					return true
+				}
+			}
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				if findContent(child) {
+					return true
+				}
+			}
+			return false
+		}
 
-		return totalCount == 0 && ps.getInnerText(p, false) == ""
+		for child := p.FirstChild; child != nil; child = child.NextSibling {
+			if findContent(child) {
+				return false
+			}
+		}
+		// Remove paragraphs where no content was found
+		return true
 	})
 
 	ps.forEachNode(dom.GetElementsByTagName(articleContent, "br"), func(br *html.Node, _ int) {
