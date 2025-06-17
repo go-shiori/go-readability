@@ -23,9 +23,7 @@ import (
 var (
 	rxVideos               = regexp.MustCompile(`(?i)//(www\.)?((dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq)\.com|(archive|upload\.wikimedia)\.org|player\.twitch\.tv)`)
 	rxTokenize             = regexp.MustCompile(`(?i)\W+`)
-	rxWhitespace           = regexp.MustCompile(`(?i)^\s*$`)
 	rxHasContent           = regexp.MustCompile(`(?i)\S$`)
-	rxHashURL              = regexp.MustCompile(`(?i)^#.+`)
 	rxPropertyPattern      = regexp.MustCompile(`(?i)\s*(dc|dcterm|og|article|twitter)\s*:\s*(author|creator|description|title|site_name|published_time|modified_time|image\S*)\s*`)
 	rxNamePattern          = regexp.MustCompile(`(?i)^\s*(?:(dc|dcterm|article|og|twitter|weibo:(article|webpage))\s*[\.:]\s*)?(author|creator|description|title|site_name|published_time|modified_time|image)\s*$`)
 	rxTitleSeparator       = regexp.MustCompile(`(?i) [\|\-\\/>»] `)
@@ -405,8 +403,7 @@ func (ps *Parser) getArticleTitle() string {
 		}
 	}
 
-	curTitle = strings.TrimSpace(curTitle)
-	curTitle = re2go.NormalizeSpaces(curTitle)
+	curTitle = normalizeWhitespace(curTitle)
 	// If we now have 4 words or fewer as our title, and either no
 	// 'hierarchical' separators (\, /, > or ») were found in the original
 	// title or we decreased the number of words by more than 1 word, use
@@ -448,7 +445,7 @@ func (ps *Parser) prepDocument() {
 // same node is returned.
 func (ps *Parser) nextNode(node *html.Node) *html.Node {
 	next := node
-	for next != nil && next.Type != html.ElementNode && rxWhitespace.MatchString(dom.TextContent(next)) {
+	for next != nil && next.Type != html.ElementNode && !hasTextContent(next) {
 		next = next.NextSibling
 	}
 	return next
@@ -589,7 +586,7 @@ func (ps *Parser) prepArticle(articleContent *html.Node) {
 		iframeCount := len(dom.GetElementsByTagName(p, "iframe"))
 		totalCount := imgCount + embedCount + objectCount + iframeCount
 
-		return totalCount == 0 && ps.getInnerText(p, false) == ""
+		return totalCount == 0 && !hasTextContent(p)
 	})
 
 	ps.forEachNode(dom.GetElementsByTagName(articleContent, "br"), func(br *html.Node, _ int) {
@@ -714,31 +711,19 @@ func (ps *Parser) checkByline(node *html.Node, matchString string) bool {
 
 	rel := dom.GetAttribute(node, "rel")
 	itemprop := dom.GetAttribute(node, "itemprop")
-	nodeText := dom.TextContent(node)
-	if (rel == "author" || strings.Contains(itemprop, "author") || re2go.IsByline(matchString)) &&
-		ps.isValidByline(nodeText) {
-		nodeText = strings.TrimSpace(nodeText)
-		nodeText = strings.Join(strings.Fields(nodeText), " ")
-		ps.articleByline = nodeText
+	if rel != "author" && !strings.Contains(itemprop, "author") && !re2go.IsByline(matchString) {
+		return false
+	}
+
+	nodeText := ps.getInnerText(node, false)
+	// For now, it's intentional that counting characters happens before
+	// whitespace normalization. Doing it the other way around breaks several
+	// tests and the bylines end up different.
+	if nChar := charCount(nodeText); nChar > 0 && nChar < 100 {
+		ps.articleByline = normalizeWhitespace(nodeText)
 		return true
 	}
-
 	return false
-}
-
-func (ps *Parser) getTextDensity(node *html.Node, tags ...string) float64 {
-	textLength := charCount(ps.getInnerText(node, true))
-	if textLength == 0 {
-		return 0
-	}
-
-	var childrenLength int
-	children := ps.getAllNodesWithTag(node, tags...)
-	ps.forEachNode(children, func(child *html.Node, _ int) {
-		childrenLength += charCount(ps.getInnerText(child, true))
-	})
-
-	return float64(childrenLength) / float64(textLength)
 }
 
 // getNodeAncestors gets the node's direct parent and grandparents.
@@ -816,7 +801,7 @@ func (ps *Parser) grabArticle() *html.Node {
 
 			if shouldRemoveTitleHeader && ps.headerDuplicatesTitle(node) {
 				ps.logf("removing header: %q duplicate of %q\n",
-					trim(dom.TextContent(node)), trim(ps.articleTitle))
+					ps.getInnerText(node, true), normalizeWhitespace(ps.articleTitle))
 				shouldRemoveTitleHeader = false
 				node = ps.removeAndGetNext(node)
 				continue
@@ -911,9 +896,9 @@ func (ps *Parser) grabArticle() *html.Node {
 				return
 			}
 
+			numChars, numCommas := countCharsAndCommas(elementToScore)
 			// If this paragraph is less than 25 characters, don't even count it.
-			innerText := ps.getInnerText(elementToScore, true)
-			if charCount(innerText) < 25 {
+			if numChars < 25 {
 				return
 			}
 
@@ -927,10 +912,10 @@ func (ps *Parser) grabArticle() *html.Node {
 			contentScore := 1
 
 			// Add points for any commas within this paragraph.
-			contentScore += re2go.CountCommas(innerText)
+			contentScore += numCommas
 
 			// For every 100 characters in this paragraph, add another point. Up to 3 points.
-			contentScore += int(math.Min(math.Floor(float64(charCount(innerText))/100.0), 3.0))
+			contentScore += int(math.Min(math.Floor(float64(numChars)/100.0), 3.0))
 
 			// Initialize and score ancestors.
 			ps.forEachNode(ancestors, func(ancestor *html.Node, level int) {
@@ -1130,6 +1115,7 @@ func (ps *Parser) grabArticle() *html.Node {
 					appendNode = true
 				} else if dom.TagName(sibling) == "p" {
 					linkDensity := ps.getLinkDensity(sibling)
+					// FIXME: avoid gathering nodeContent just to detect whether there was a sentence period
 					nodeContent := ps.getInnerText(sibling, true)
 					nodeLength := charCount(nodeContent)
 
@@ -1199,7 +1185,7 @@ func (ps *Parser) grabArticle() *html.Node {
 		// gives us a higher likelihood of finding the content, and
 		// the sieve approach gives us a higher likelihood of
 		// finding the -right- content.
-		textLength := charCount(ps.getInnerText(articleContent, true))
+		textLength, _ := countCharsAndCommas(articleContent)
 		if textLength < ps.CharThresholds {
 			parseSuccessful = false
 
@@ -1247,15 +1233,6 @@ func (ps *Parser) grabArticle() *html.Node {
 			return articleContent
 		}
 	}
-}
-
-// isValidByline checks whether the input string could be a byline.
-// This verifies that the input is a string, and that the length
-// is less than 100 chars.
-func (ps *Parser) isValidByline(byline string) bool {
-	byline = strings.TrimSpace(byline)
-	nChar := charCount(byline)
-	return nChar > 0 && nChar < 100
 }
 
 // getJSONLD try to extract metadata from JSON-LD object.
@@ -1515,8 +1492,7 @@ func (ps *Parser) isSingleImage(node *html.Node) bool {
 	}
 
 	children := dom.Children(node)
-	textContent := dom.TextContent(node)
-	if len(children) != 1 || strings.TrimSpace(textContent) != "" {
+	if len(children) != 1 || hasTextContent(node) {
 		return false
 	}
 
@@ -1624,15 +1600,23 @@ func (ps *Parser) hasSingleTagInsideElement(element *html.Node, tag string) bool
 }
 
 // isElementWithoutContent determines if node is empty
-// or only fille with <br> and <hr>.
+// or only filled with <br> and <hr>.
 func (ps *Parser) isElementWithoutContent(node *html.Node) bool {
-	brs := dom.GetElementsByTagName(node, "br")
-	hrs := dom.GetElementsByTagName(node, "hr")
-	childs := dom.Children(node)
-
-	return node.Type == html.ElementNode &&
-		strings.TrimSpace(dom.TextContent(node)) == "" &&
-		(len(childs) == 0 || len(childs) == len(brs)+len(hrs))
+	if node.Type != html.ElementNode {
+		return false
+	}
+	// Traverse the node's descendants to find any text content that is
+	// non-whitespace or any elements other than <br> and <hr>.
+	for child := range node.ChildNodes() {
+		if child.Type == html.TextNode {
+			if hasContent(child.Data) {
+				return false
+			}
+		} else if child.Type == html.ElementNode && child.Data != "br" && child.Data != "hr" {
+			return false
+		}
+	}
+	return true
 }
 
 // hasChildBlockElement determines whether element has any children
@@ -1654,26 +1638,18 @@ func (ps *Parser) isPhrasingContent(node *html.Node) bool {
 
 // isWhitespace determines if a node only used as whitespace.
 func (ps *Parser) isWhitespace(node *html.Node) bool {
-	return (node.Type == html.TextNode && strings.TrimSpace(dom.TextContent(node)) == "") ||
+	return (node.Type == html.TextNode && !hasTextContent(node)) ||
 		(node.Type == html.ElementNode && dom.TagName(node) == "br")
 }
 
-// getInnerText gets the inner text of a node.
-// This also strips * out any excess whitespace to be found.
-// In Readability.js, normalizeSpaces default to true.
+// getInnerText gets the inner text of a node. This also strips out any excess
+// whitespace to be found. In Readability.js, normalizeSpaces defaults to true.
 func (ps *Parser) getInnerText(node *html.Node, normalizeSpaces bool) string {
-	textContent := strings.TrimSpace(dom.TextContent(node))
+	textContent := dom.TextContent(node)
 	if normalizeSpaces {
-		textContent = re2go.NormalizeSpaces(textContent)
+		return normalizeWhitespace(textContent)
 	}
-	return textContent
-}
-
-// getCharCount returns the number of times a string s
-// appears in the node.
-func (ps *Parser) getCharCount(node *html.Node, s string) int {
-	innerText := ps.getInnerText(node, true)
-	return strings.Count(innerText, s)
+	return strings.TrimSpace(textContent)
 }
 
 // cleanStyles removes the style attribute on every node and under.
@@ -1702,26 +1678,48 @@ func (ps *Parser) cleanStyles(node *html.Node) {
 // content. This is the amount of text that is inside a link divided
 // by the total text in the node.
 func (ps *Parser) getLinkDensity(element *html.Node) float64 {
-	textLength := charCount(ps.getInnerText(element, true))
-	if textLength == 0 {
+	chars := &charCounter{}
+	var linkCharsWeighted float64
+
+	var walk func(*html.Node, runeCounter)
+	walk = func(n *html.Node, linkCounter runeCounter) {
+		if n.Type == html.TextNode {
+			for _, r := range n.Data {
+				chars.Count(r)
+				if linkCounter != nil {
+					linkCounter.Count(r)
+				}
+			}
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "a" {
+			cc := &charCounter{}
+			linkCoefficient := getLinkDensityCoefficient(n)
+			defer func() {
+				linkCharsWeighted += float64(cc.Total) * linkCoefficient
+			}()
+			linkCounter = cc
+		}
+		for child := range n.ChildNodes() {
+			walk(child, linkCounter)
+		}
+	}
+	walk(element, nil)
+
+	if chars.Total == 0 {
 		return 0
 	}
+	return linkCharsWeighted / float64(chars.Total)
+}
 
-	var linkLength float64
-	ps.forEachNode(dom.GetElementsByTagName(element, "a"), func(linkNode *html.Node, _ int) {
-		href := dom.GetAttribute(linkNode, "href")
-		href = strings.TrimSpace(href)
-
-		coefficient := 1.0
-		if href != "" && rxHashURL.MatchString(href) {
-			coefficient = 0.3
-		}
-
-		nodeLength := charCount(ps.getInnerText(linkNode, true))
-		linkLength += float64(nodeLength) * coefficient
-	})
-
-	return linkLength / float64(textLength)
+// getLinkDensityCoefficient ensures that the text contents of links is scored lower for links
+// that point to sections within the same document.
+func getLinkDensityCoefficient(a *html.Node) float64 {
+	href := strings.TrimSpace(dom.GetAttribute(a, "href"))
+	if len(href) > 1 && href[0] == '#' {
+		return 0.3
+	}
+	return 1.0
 }
 
 // getClassWeight gets an elements class/id weight. Uses regular
@@ -2014,18 +2012,6 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			return false
 		}
 
-		isList := tag == "ul" || tag == "ol"
-		if !isList {
-			var listLength int
-			listNodes := ps.getAllNodesWithTag(node, "ul", "ol")
-			ps.forEachNode(listNodes, func(list *html.Node, _ int) {
-				listLength += charCount(ps.getInnerText(list, true))
-			})
-
-			nodeLength := charCount(ps.getInnerText(node, true))
-			isList = float64(listLength)/float64(nodeLength) > 0.9
-		}
-
 		// Next check if we're inside a data table, in which case don't remove it as well.
 		if ps.hasAncestorTag(node, "table", -1, ps.isReadabilityDataTable) {
 			return false
@@ -2035,25 +2021,89 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 			return false
 		}
 
+		// NOTE: Readability.js also uses a contentScore of 0 here
 		var contentScore int
 		weight := ps.getClassWeight(node)
 		if weight+contentScore < 0 {
 			return true
 		}
 
-		if ps.getCharCount(node, ",") < 10 {
-			// If there are not very many commas, and the number of
-			// non-paragraph elements is more than paragraphs or other
-			// ominous signs, remove the element.
-			p := float64(len(dom.GetElementsByTagName(node, "p")))
-			img := float64(len(dom.GetElementsByTagName(node, "img")))
-			li := float64(len(dom.GetElementsByTagName(node, "li")) - 100)
-			input := float64(len(dom.GetElementsByTagName(node, "input")))
-			headingDensity := ps.getTextDensity(node, "h1", "h2", "h3", "h4", "h5", "h6")
+		chars := &charCounter{}
+		listChars := &charCounter{}
+		var linkCharsWeighted float64
+		headingChars := &charCounter{}
+		commas := &commaCounter{}
+		pCount := 0
+		imgCount := 0
+		liCount := 0
+		inputCount := 0
+		embedCount := 0
 
-			embedCount := 0
+		// Walk the DOM under this node to determine element counts and various types of content
+		// densities. Most notably, this scans for:
+		// - overall character count
+		// - character count of text under <ul> and <ol>
+		// - character count of any heading text, e.g. <h1>
+		// - character count of text under <a>, weighted by href type
+		// - number of comma characters in text
+		var walk func(*html.Node, runeCounter, runeCounter, runeCounter)
+		walk = func(n *html.Node, listCounter, headingCounter, linkCounter runeCounter) {
+			if n.Type == html.TextNode {
+				for _, r := range n.Data {
+					chars.Count(r)
+					commas.Count(r)
+					if listCounter != nil {
+						listCounter.Count(r)
+					}
+					if headingCounter != nil {
+						headingChars.Count(r)
+					}
+					if linkCounter != nil {
+						linkCounter.Count(r)
+					}
+				}
+				return
+			}
+			if n.Type == html.ElementNode {
+				switch n.Data {
+				case "ul", "ol":
+					listCounter = listChars.ResetContext()
+				case "h1", "h2", "h3", "h4", "h5", "h6":
+					headingCounter = headingChars.ResetContext()
+				case "a":
+					cc := &charCounter{}
+					linkCoefficient := getLinkDensityCoefficient(n)
+					defer func() {
+						linkCharsWeighted += float64(cc.Total) * linkCoefficient
+					}()
+					linkCounter = cc
+				case "p":
+					pCount++
+				case "img":
+					imgCount++
+				case "li":
+					liCount++
+				case "input":
+					inputCount++
+				case "object", "embed", "iframe":
+					embedCount++
+				}
+			}
+			for child := range n.ChildNodes() {
+				walk(child, listCounter, headingCounter, linkCounter)
+			}
+		}
+		walk(node, nil, nil, nil)
+
+		isList := tag == "ul" || tag == "ol"
+		if !isList {
+			isList = float64(listChars.Total)/float64(chars.Total) > 0.9
+		}
+
+		// If there are not very many commas, and the number of non-paragraph elements is more than
+		// paragraphs or other ominous signs, remove the element.
+		if commas.Total < 10 {
 			embeds := ps.getAllNodesWithTag(node, "object", "embed", "iframe")
-
 			for _, embed := range embeds {
 				// If this embed has attribute that matches video regex,
 				// don't delete it.
@@ -2067,19 +2117,28 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 				if dom.TagName(embed) == "object" && rxVideoVilter.MatchString(dom.InnerHTML(embed)) {
 					return false
 				}
-
-				embedCount++
 			}
 
-			linkDensity := ps.getLinkDensity(node)
-			contentLength := charCount(ps.getInnerText(node, true))
-			haveToRemove := (img > 1 && p/img < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
-				(!isList && li > p) ||
-				(input > math.Floor(p/3)) ||
-				(!isList && headingDensity < 0.9 && contentLength < 25 && (img == 0 || img > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+			var headingDensity float64
+			if chars.Total > 0 {
+				headingDensity = float64(headingChars.Total) / float64(chars.Total)
+			}
+			var linkDensity float64
+			if chars.Total > 0 {
+				linkDensity = linkCharsWeighted / float64(chars.Total)
+			}
+
+			// Readability.js reduces the weight of <li> elements by a static 100 when comparing to
+			// the number of paragraphs.
+			const liCountOffset = -100
+
+			haveToRemove := (imgCount > 1 && float64(pCount)/float64(imgCount) < 0.5 && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
+				(!isList && (liCount+liCountOffset) > pCount) ||
+				(float64(inputCount) > math.Floor(float64(pCount)/3)) ||
+				(!isList && headingDensity < 0.9 && chars.Total < 25 && (imgCount == 0 || imgCount > 2) && !ps.hasAncestorTag(node, "figure", 3, nil)) ||
 				(!isList && weight < 25 && linkDensity > 0.2) ||
 				(weight >= 25 && linkDensity > 0.5) ||
-				((embedCount == 1 && contentLength < 75) || embedCount > 1)
+				((embedCount == 1 && chars.Total < 75) || embedCount > 1)
 
 			// Allow simple lists of images to remain in pages
 			if isList && haveToRemove {
@@ -2091,8 +2150,7 @@ func (ps *Parser) cleanConditionally(element *html.Node, tag string) {
 				}
 
 				// Only allow the list to remain if every li contains an image
-				liCount := len(dom.GetElementsByTagName(node, "li"))
-				if int(img) == liCount {
+				if imgCount == liCount {
 					return false
 				}
 			}
