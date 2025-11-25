@@ -1,3 +1,4 @@
+// Deprecated: use codeberg.org/readeck/go-readability/v2 instead.
 module github.com/go-shiori/go-readability
 
 go 1.23

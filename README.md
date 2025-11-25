@@ -4,6 +4,9 @@ Go-Readability is a Go package that find the main readable content and the metad
 
 This package is based from [Readability.js] by [Mozilla] and written line by line to make sure it looks and works as similar as possible. This way, hopefully all web page that can be parsed by Readability.js are parse-able by go-readability as well.
 
+> [!WARNING]
+> This package is deprecated in favor of [codeberg.org/readeck/go-readability/v2](https://codeberg.org/readeck/go-readability/src/branch/v2).
+
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
@@ -15,7 +18,9 @@ This package is based from [Readability.js] by [Mozilla] and written line by lin
 
 ## Status
 
-This package is stable enough for use and up to date with Readability.js [v0.4.4][last-version] (commit [`b359811`][last-commit]).
+This package is stable enough for use and up to date with [Readability.js v0.5.0][last-version].
+
+For compatibility with Readability.js v0.6, use [codeberg.org/readeck/go-readability/v2](https://codeberg.org/readeck/go-readability/src/branch/v2).
 
 ## Installation
 
@@ -173,6 +178,5 @@ Go-Readability is distributed under [MIT license][mit], which means you can use 
 [kofi-badge]: https://img.shields.io/static/v1?label=&message=Ko-fi&color=F16061&logo=ko-fi&logoColor=white
 [readability.js]: https://github.com/mozilla/readability
 [mozilla]: https://github.com/mozilla
-[last-version]: https://github.com/mozilla/readability/tree/0.4.4
-[last-commit]: https://github.com/mozilla/readability/commit/b359811927a4bb2323eba085be004978fb18a926
+[last-version]: https://github.com/mozilla/readability/tree/0.5.0
 [mit]: https://choosealicense.com/licenses/mit/
