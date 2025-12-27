@@ -152,11 +152,6 @@ func Test_MaybeItsACandidate(t *testing.T) {
 	assert.False(t, MaybeItsACandidate(`<p class="text">Paragraph text</p>`))
 }
 
-func Test_CountCommas(t *testing.T) {
-	assert.Equal(t, 3, CountCommas("my,name,is,john"))
-	assert.Equal(t, 9, CountCommas("now,its،a mixed﹐commas︐from︑various⹁place⸴and⸲country，"))
-}
-
 func Test_NormalizeSpaces(t *testing.T) {
 	assert.Equal(t, "some sentence", NormalizeSpaces("some   sentence"))
 	assert.Equal(t, "with tabs", NormalizeSpaces("with \t \ttabs"))

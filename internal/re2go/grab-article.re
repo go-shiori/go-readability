@@ -37,25 +37,3 @@ func MaybeItsACandidate(input string) bool {
 		*/
 	}
 }
-
-// Commas as used in Latin, Sindhi, Chinese and various other scripts.
-// see: https://en.wikipedia.org/wiki/Comma#Comma_variants
-// Original pattern: \u002C|\u060C|\uFE50|\uFE10|\uFE11|\u2E41|\u2E34|\u2E32|\uFF0C
-func CountCommas(input string) int {
-	var count int
-	var cursor, marker int
-	input += string(rune(0)) // add terminating null
-	limit := len(input) - 1  // limit points at the terminating null
-	_ = marker
-
-	for { /*!use:re2c:base_template
-		re2c:case-insensitive = 1;
-
-		commas = [\u002C\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C];
-
-		{commas} { count++; continue }
-		*        { continue }
-		$        { return count }
-		*/
-	}
-}
